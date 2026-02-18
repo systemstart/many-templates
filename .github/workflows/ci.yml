@@ -54,6 +54,8 @@ jobs:
         env:
           GIT_BRANCH: main
         run: |
+          git config user.name "${{ github.actor }}"
+          git config user.email "${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com"
           VERSION=$(gsemver bump)
           TAG="v${VERSION}"
           if git rev-parse "$TAG" >/dev/null 2>&1; then
