@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ocis
+  labels:
+    app.kubernetes.io/name: ocis
+    app.kubernetes.io/part-of: office

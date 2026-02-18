@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: woodpecker-agent
+  namespace: woodpecker
+  labels:
+    app.kubernetes.io/name: woodpecker
+    app.kubernetes.io/component: agent
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: woodpecker
+      app.kubernetes.io/component: agent
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: woodpecker
+        app.kubernetes.io/component: agent
+    spec:
+      serviceAccountName: woodpecker-agent
+      containers:
+        - name: woodpecker-agent
+          image: woodpeckerci/woodpecker-agent:latest
+          env:
+            - name: WOODPECKER_SERVER
+              value: "woodpecker-server:9000"
+            - name: WOODPECKER_AGENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: woodpecker-secrets
+                  key: WOODPECKER_AGENT_SECRET
+            - name: WOODPECKER_BACKEND_K8S_NAMESPACE
+              value: woodpecker
+            - name: WOODPECKER_BACKEND_K8S_STORAGE_CLASS
+              value: {{ .storageClass }}
+            - name: WOODPECKER_BACKEND_K8S_VOLUME_SIZE
+              value: "1Gi"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              memory: 256Mi

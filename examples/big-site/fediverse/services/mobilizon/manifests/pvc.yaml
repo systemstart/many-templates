@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mobilizon-uploads
+  namespace: mobilizon
+  labels:
+    app.kubernetes.io/name: mobilizon
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: {{ .storageClass }}
+  resources:
+    requests:
+      storage: {{ .storage.mobilizon }}

@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: mobilizon
+  namespace: mobilizon
+  labels:
+    app.kubernetes.io/name: mobilizon
+spec:
+  selector:
+    app.kubernetes.io/name: mobilizon
+  ports:
+    - port: 4000
+      targetPort: http
+      name: http

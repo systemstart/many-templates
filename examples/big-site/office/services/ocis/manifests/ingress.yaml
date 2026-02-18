@@ -1,0 +1,25 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ocis
+  namespace: ocis
+  annotations:
+    cert-manager.io/cluster-issuer: {{ .certIssuer }}
+    nginx.ingress.kubernetes.io/proxy-body-size: 1g
+spec:
+  ingressClassName: {{ .ingressClassName }}
+  tls:
+    - hosts:
+        - {{ .subdomains.ocis }}.{{ .domain }}
+      secretName: ocis-tls
+  rules:
+    - host: {{ .subdomains.ocis }}.{{ .domain }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: ocis
+                port:
+                  number: 9200

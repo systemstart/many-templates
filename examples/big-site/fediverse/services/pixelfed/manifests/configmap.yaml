@@ -1,0 +1,57 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pixelfed-env
+  namespace: pixelfed
+data:
+  APP_NAME: "Pixelfed"
+  APP_ENV: "production"
+  APP_DEBUG: "false"
+  APP_URL: "https://{{ .subdomains.pixelfed }}.{{ .domain }}"
+  APP_DOMAIN: "{{ .subdomains.pixelfed }}.{{ .domain }}"
+  ADMIN_DOMAIN: "{{ .subdomains.pixelfed }}.{{ .domain }}"
+  SESSION_DOMAIN: "{{ .subdomains.pixelfed }}.{{ .domain }}"
+  TRUST_PROXIES: "*"
+
+  # ActivityPub federation
+  ACTIVITY_PUB: "true"
+  AP_REMOTE_FOLLOW: "true"
+  AP_INBOX: "true"
+  AP_OUTBOX: "true"
+  AP_SHAREDINBOX: "true"
+
+  # OIDC via Dex (available since Pixelfed v0.12.6)
+  # When enabled, hides the local login UI entirely
+  OAUTH_ENABLED: "true"
+  OIDC_ENABLED: "true"
+  OIDC_DISPLAY_NAME: "SSO Login"
+  OIDC_ISSUER: "https://{{ .subdomains.dex }}.{{ .domain }}"
+  OIDC_CLIENT_ID: "{{ .oidc.pixelfed.clientId }}"
+  OIDC_SCOPES: "openid,profile,email"
+  OIDC_FIELD_TO_SYNC: "email"
+  OIDC_AUTO_REGISTRATION: "true"
+
+  # Database
+  DB_CONNECTION: "pgsql"
+  DB_HOST: "pixelfed-postgres"
+  DB_PORT: "5432"
+  DB_DATABASE: "pixelfed"
+  DB_USERNAME: "pixelfed"
+
+  # Redis
+  REDIS_HOST: "pixelfed-redis"
+  REDIS_PORT: "6379"
+
+  # Email
+  MAIL_DRIVER: "smtp"
+  MAIL_HOST: "{{ .smtp.host }}"
+  MAIL_PORT: "{{ .smtp.port }}"
+  MAIL_USERNAME: "{{ .smtp.username }}"
+  MAIL_FROM_ADDRESS: "{{ .smtp.from }}"
+  MAIL_FROM_NAME: "Pixelfed"
+  MAIL_ENCRYPTION: "tls"
+
+  # Storage
+  FILESYSTEM_DRIVER: "local"
+  MAX_PHOTO_SIZE: "15000"
+  IMAGE_QUALITY: "80"

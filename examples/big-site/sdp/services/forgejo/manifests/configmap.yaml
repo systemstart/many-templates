@@ -1,0 +1,56 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: forgejo-config
+  namespace: forgejo
+data:
+  app.ini: |
+    APP_NAME = Forgejo
+    RUN_MODE = prod
+
+    [server]
+    DOMAIN = {{ .subdomains.forgejo }}.{{ .domain }}
+    ROOT_URL = https://{{ .subdomains.forgejo }}.{{ .domain }}/
+    HTTP_PORT = 3000
+    SSH_DOMAIN = {{ .subdomains.forgejo }}.{{ .domain }}
+    SSH_PORT = 22
+    LFS_START_SERVER = true
+
+    [database]
+    DB_TYPE = postgres
+    HOST = forgejo-postgres:5432
+    NAME = forgejo
+    USER = forgejo
+
+    [mailer]
+    ENABLED = true
+    PROTOCOL = smtps
+    SMTP_ADDR = {{ .smtp.host }}
+    SMTP_PORT = {{ .smtp.port }}
+    FROM = {{ .smtp.from }}
+    USER = {{ .smtp.username }}
+
+    [service]
+    DISABLE_REGISTRATION = true
+    ALLOW_ONLY_EXTERNAL_REGISTRATION = true
+    REQUIRE_SIGNIN_VIEW = false
+
+    [oauth2]
+    ENABLED = true
+
+    [openid]
+    ENABLE_OPENID_SIGNIN = true
+    ENABLE_OPENID_SIGNUP = true
+
+    [session]
+    PROVIDER = file
+
+    [log]
+    MODE = console
+    LEVEL = info
+
+    [repository]
+    ROOT = /data/gitea/repositories
+
+    [lfs]
+    PATH = /data/gitea/lfs

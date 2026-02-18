@@ -1,0 +1,111 @@
+domain: "example.com"
+
+# Subdomains for each service
+subdomains:
+  # Infrastructure (shared)
+  dex: "auth"
+  lldap: "ldap"
+  # Fediverse
+  minio: "s3"
+  mastodon: "social"
+  matrix: "matrix"
+  element: "chat"
+  mobilizon: "events"
+  pixelfed: "photos"
+  # Office
+  ocis: "cloud"
+  paperless: "docs"
+  stalwart: "mail"
+  # SDP
+  forgejo: "git"
+  woodpecker: "ci"
+  harbor: "registry"
+  argocd: "cd"
+
+# Kubernetes infrastructure
+storageClass: "default"
+ingressClassName: "nginx"
+certIssuer: "letsencrypt-prod"
+
+# PVC sizes
+storage:
+  # Infrastructure
+  lldap: "1Gi"
+  minio: "50Gi"
+  # Fediverse
+  matrix: "10Gi"
+  mobilizon: "20Gi"
+  pixelfed: "50Gi"
+  # Office
+  ocis: "100Gi"
+  paperless: "20Gi"
+  stalwart: "50Gi"
+  # SDP
+  forgejo: "50Gi"
+  woodpecker: "5Gi"
+  harbor:
+    registry: "100Gi"
+    jobLog: "1Gi"
+    trivy: "5Gi"
+  # Shared Postgres sidecar size
+  postgres: "10Gi"
+
+# LLDAP
+lldap:
+  adminUsername: "admin"
+
+# MinIO S3 (used by fediverse services)
+minio:
+  endpoint: "https://s3.example.com"
+  region: "sprawl-west-1"
+  buckets:
+    mastodon: "mastodon-media"
+
+# SMTP (shared by all services)
+smtp:
+  host: "smtp.example.com"
+  port: "587"
+  from: "noreply@example.com"
+  username: "smtp-user"
+
+# Argo CD application management
+argocd:
+  project: "site"
+  repoURL: "https://github.com/example/big-site.git"
+  targetRevision: "main"
+  basePath: "deploy"
+
+# Dex OIDC client IDs
+oidc:
+  # Fediverse
+  mastodon:
+    clientId: "mastodon"
+  matrix:
+    clientId: "synapse"
+  mobilizon:
+    clientId: "mobilizon"
+  pixelfed:
+    clientId: "pixelfed"
+  # Office
+  ocis:
+    clientId: "ocis"
+  paperless:
+    clientId: "paperless"
+  stalwart:
+    clientId: "stalwart"
+  # SDP
+  forgejo:
+    clientId: "forgejo"
+  harbor:
+    clientId: "harbor"
+  argocd:
+    clientId: "argocd"
+
+# Woodpecker authenticates via Forgejo OAuth2 (not Dex directly)
+woodpecker:
+  forgejoClientId: "woodpecker-ci"
+
+# External Secrets Operator
+eso:
+  secretStoreName: "cluster-secret-store"
+  remotePathPrefix: "site"

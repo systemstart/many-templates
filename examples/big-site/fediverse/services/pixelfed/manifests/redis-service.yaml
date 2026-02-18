@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: pixelfed-redis
+  namespace: pixelfed
+  labels:
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/part-of: pixelfed
+spec:
+  selector:
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/part-of: pixelfed
+  ports:
+    - port: 6379
+      targetPort: 6379

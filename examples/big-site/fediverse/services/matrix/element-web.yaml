@@ -1,0 +1,94 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: element-web
+  namespace: {{ .namespace }}
+  labels:
+    app.kubernetes.io/name: element-web
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: element-web
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: element-web
+    spec:
+      containers:
+        - name: element-web
+          image: vectorim/element-web:latest
+          ports:
+            - name: http
+              containerPort: 80
+          volumeMounts:
+            - name: config
+              mountPath: /app/config.json
+              subPath: config.json
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 128Mi
+      volumes:
+        - name: config
+          configMap:
+            name: element-web-config
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: element-web-config
+  namespace: {{ .namespace }}
+data:
+  config.json: |
+    {
+      "default_server_config": {
+        "m.homeserver": {
+          "base_url": "https://{{ .subdomains.matrix }}.{{ .domain }}",
+          "server_name": "{{ .subdomains.matrix }}.{{ .domain }}"
+        }
+      },
+      "brand": "Element",
+      "sso_redirect_options": {
+        "immediate": false
+      }
+    }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: element-web
+  namespace: {{ .namespace }}
+spec:
+  selector:
+    app.kubernetes.io/name: element-web
+  ports:
+    - port: 80
+      targetPort: http
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: element-web
+  namespace: {{ .namespace }}
+  annotations:
+    cert-manager.io/cluster-issuer: {{ .certIssuer }}
+spec:
+  ingressClassName: {{ .ingressClassName }}
+  tls:
+    - hosts:
+        - {{ .subdomains.element }}.{{ .domain }}
+      secretName: element-web-tls
+  rules:
+    - host: {{ .subdomains.element }}.{{ .domain }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: element-web
+                port:
+                  number: 80

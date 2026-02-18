@@ -1,0 +1,20 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: office
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: {{ .argocd.project }}
+  source:
+    repoURL: {{ .argocd.repoURL }}
+    targetRevision: {{ .argocd.targetRevision }}
+    path: {{ .argocd.basePath }}/office/apps
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

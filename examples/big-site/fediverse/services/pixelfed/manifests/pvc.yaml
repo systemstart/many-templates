@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pixelfed-storage
+  namespace: pixelfed
+  labels:
+    app.kubernetes.io/name: pixelfed
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: {{ .storageClass }}
+  resources:
+    requests:
+      storage: {{ .storage.pixelfed }}

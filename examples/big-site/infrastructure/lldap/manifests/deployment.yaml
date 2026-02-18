@@ -1,0 +1,70 @@
+{{- $baseDN := printf "dc=%s" (join ",dc=" (splitList "." .domain)) -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lldap
+  namespace: lldap
+  labels:
+    app.kubernetes.io/name: lldap
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: lldap
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: lldap
+    spec:
+      containers:
+        - name: lldap
+          image: lldap/lldap:latest
+          ports:
+            - name: ldap
+              containerPort: 3890
+            - name: web
+              containerPort: 17170
+          env:
+            - name: LLDAP_LDAP_BASE_DN
+              value: {{ $baseDN }}
+            - name: LLDAP_LDAP_USER_DN
+              value: {{ .lldap.adminUsername }}
+            - name: LLDAP_LDAP_USER_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: lldap-secrets
+                  key: LLDAP_LDAP_USER_PASS
+            - name: LLDAP_JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: lldap-secrets
+                  key: LLDAP_JWT_SECRET
+            - name: LLDAP_LDAP_USER_EMAIL
+              value: {{ .smtp.from }}
+            - name: LLDAP_HTTP_URL
+              value: https://{{ .subdomains.lldap }}.{{ .domain }}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 128Mi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: web
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: web
+            initialDelaySeconds: 5
+            periodSeconds: 5
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: lldap-data

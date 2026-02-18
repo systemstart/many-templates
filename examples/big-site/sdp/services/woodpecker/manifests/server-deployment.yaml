@@ -1,0 +1,81 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: woodpecker-server
+  namespace: woodpecker
+  labels:
+    app.kubernetes.io/name: woodpecker
+    app.kubernetes.io/component: server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: woodpecker
+      app.kubernetes.io/component: server
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: woodpecker
+        app.kubernetes.io/component: server
+    spec:
+      containers:
+        - name: woodpecker-server
+          image: woodpeckerci/woodpecker-server:latest
+          ports:
+            - name: http
+              containerPort: 8000
+            - name: grpc
+              containerPort: 9000
+          env:
+            - name: WOODPECKER_HOST
+              value: "https://{{ .subdomains.woodpecker }}.{{ .domain }}"
+            - name: WOODPECKER_OPEN
+              value: "true"
+            - name: WOODPECKER_GITEA
+              value: "true"
+            - name: WOODPECKER_GITEA_URL
+              value: "https://{{ .subdomains.forgejo }}.{{ .domain }}"
+            - name: WOODPECKER_GITEA_CLIENT
+              valueFrom:
+                secretKeyRef:
+                  name: woodpecker-secrets
+                  key: WOODPECKER_GITEA_CLIENT
+            - name: WOODPECKER_GITEA_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: woodpecker-secrets
+                  key: WOODPECKER_GITEA_SECRET
+            - name: WOODPECKER_AGENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: woodpecker-secrets
+                  key: WOODPECKER_AGENT_SECRET
+            - name: WOODPECKER_DATABASE_DRIVER
+              value: "sqlite3"
+            - name: WOODPECKER_DATABASE_DATASOURCE
+              value: "/var/lib/woodpecker/woodpecker.sqlite"
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/woodpecker
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              memory: 256Mi
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: woodpecker-data

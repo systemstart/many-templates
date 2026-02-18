@@ -1,0 +1,51 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mobilizon-config
+  namespace: mobilizon
+data:
+  # Mobilizon uses Elixir config — OIDC is configured via the "Keycloak" Ueberauth strategy,
+  # which works with any OIDC provider despite the name. Endpoints must be explicit
+  # because Mobilizon does not support auto-discovery.
+  config.exs: |
+    import Config
+
+    config :mobilizon, Mobilizon.Web.Endpoint,
+      url: [host: "{{ .subdomains.mobilizon }}.{{ .domain }}", scheme: "https", port: 443]
+
+    config :mobilizon, :instance,
+      name: "{{ .subdomains.mobilizon }}.{{ .domain }}",
+      description: "Fediverse Events",
+      hostname: "{{ .subdomains.mobilizon }}.{{ .domain }}",
+      registrations_open: false,
+      languages: ["en"]
+
+    config :mobilizon, Mobilizon.Service.Auth.Authenticator,
+      Mobilizon.Service.Auth.MobilizonAuthenticator
+
+    config :ueberauth, Ueberauth,
+      providers: [
+        keycloak: {Ueberauth.Strategy.Keycloak, [default_scope: "openid profile email"]}
+      ]
+
+    config :ueberauth, Ueberauth.Strategy.Keycloak.OAuth,
+      client_id: "{{ .oidc.mobilizon.clientId }}",
+      client_secret: "{{ .secrets.oidc.mobilizon }}",
+      site: "https://{{ .subdomains.dex }}.{{ .domain }}",
+      authorize_url: "https://{{ .subdomains.dex }}.{{ .domain }}/auth",
+      token_url: "https://{{ .subdomains.dex }}.{{ .domain }}/token",
+      userinfo_url: "https://{{ .subdomains.dex }}.{{ .domain }}/userinfo"
+
+    config :mobilizon, Mobilizon.Web.Email.Mailer,
+      adapter: Swoosh.Adapters.SMTP,
+      relay: "{{ .smtp.host }}",
+      port: {{ .smtp.port }},
+      username: "{{ .smtp.username }}",
+      tls: :if_available,
+      auth: :if_available
+
+    config :mobilizon, Mobilizon.Storage.Repo,
+      username: "mobilizon",
+      database: "mobilizon",
+      hostname: "mobilizon-postgres",
+      port: 5432

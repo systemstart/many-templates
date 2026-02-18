@@ -1,0 +1,86 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mobilizon
+  namespace: mobilizon
+  labels:
+    app.kubernetes.io/name: mobilizon
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: mobilizon
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: mobilizon
+    spec:
+      containers:
+        - name: mobilizon
+          image: framasoft/mobilizon:latest
+          ports:
+            - name: http
+              containerPort: 4000
+          env:
+            - name: MOBILIZON_INSTANCE_HOST
+              value: {{ .subdomains.mobilizon }}.{{ .domain }}
+            - name: MOBILIZON_INSTANCE_PORT
+              value: "443"
+            - name: MOBILIZON_INSTANCE_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: mobilizon-secrets
+                  key: MOBILIZON_INSTANCE_SECRET
+            - name: MOBILIZON_DATABASE_HOST
+              value: mobilizon-postgres
+            - name: MOBILIZON_DATABASE_USERNAME
+              value: mobilizon
+            - name: MOBILIZON_DATABASE_DBNAME
+              value: mobilizon
+            - name: MOBILIZON_DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mobilizon-secrets
+                  key: POSTGRES_PASSWORD
+            - name: MOBILIZON_SMTP_SERVER
+              value: {{ .smtp.host }}
+            - name: MOBILIZON_SMTP_PORT
+              value: "{{ .smtp.port }}"
+            - name: MOBILIZON_SMTP_USERNAME
+              value: {{ .smtp.username }}
+            - name: MOBILIZON_SMTP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mobilizon-secrets
+                  key: SMTP_PASSWORD
+          volumeMounts:
+            - name: config
+              mountPath: /etc/mobilizon/config.exs
+              subPath: config.exs
+            - name: uploads
+              mountPath: /var/lib/mobilizon/uploads
+          resources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+            limits:
+              memory: 1Gi
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 5
+      volumes:
+        - name: config
+          configMap:
+            name: mobilizon-config
+        - name: uploads
+          persistentVolumeClaim:
+            claimName: mobilizon-uploads

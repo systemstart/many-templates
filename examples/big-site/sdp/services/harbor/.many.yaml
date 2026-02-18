@@ -1,0 +1,22 @@
+context:
+  namespace: harbor
+
+pipeline:
+  - name: render-templates
+    type: template
+    template:
+      files:
+        include: ["**/*.yaml"]
+        exclude: [".many.yaml"]
+
+  - name: build
+    type: kustomize
+    kustomize:
+      enableHelm: true
+
+  - name: split-output
+    type: split
+    split:
+      input: build
+      by: resource
+      outputDir: manifests/

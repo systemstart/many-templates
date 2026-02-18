@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: mobilizon
+  labels:
+    app.kubernetes.io/name: mobilizon
+    app.kubernetes.io/part-of: fediverse

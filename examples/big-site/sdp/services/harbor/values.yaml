@@ -1,0 +1,48 @@
+externalURL: https://{{ .subdomains.harbor }}.{{ .domain }}
+
+harborAdminPassword: "{{ .secrets.harbor.adminPassword }}"
+secretKey: "{{ .secrets.harbor.secretKey }}"
+
+expose:
+  type: ingress
+  ingress:
+    className: {{ .ingressClassName }}
+    annotations:
+      cert-manager.io/cluster-issuer: {{ .certIssuer }}
+      nginx.ingress.kubernetes.io/proxy-body-size: "0"
+    hosts:
+      core: {{ .subdomains.harbor }}.{{ .domain }}
+  tls:
+    enabled: true
+    certSource: secret
+    secret:
+      secretName: harbor-tls
+
+persistence:
+  enabled: true
+  persistentVolumeClaim:
+    registry:
+      storageClass: {{ .storageClass }}
+      size: {{ .storage.harbor.registry }}
+    jobservice:
+      jobLog:
+        storageClass: {{ .storageClass }}
+        size: {{ .storage.harbor.jobLog }}
+    trivy:
+      storageClass: {{ .storageClass }}
+      size: {{ .storage.harbor.trivy }}
+
+database:
+  type: internal
+
+redis:
+  type: internal
+
+trivy:
+  enabled: true
+
+# OIDC is configured post-deployment via Harbor admin UI or API.
+# Use these Dex credentials:
+#   Provider: {{ .subdomains.dex }}.{{ .domain }}
+#   Client ID: {{ .oidc.harbor.clientId }}
+#   Endpoint: https://{{ .subdomains.dex }}.{{ .domain }}

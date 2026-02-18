@@ -1,0 +1,77 @@
+mastodon:
+  createAdmin:
+    enabled: false
+  locale: en
+  localDomain: {{ .subdomains.mastodon }}.{{ .domain }}
+  singleUserMode: false
+
+  smtp:
+    server: {{ .smtp.host }}
+    port: {{ .smtp.port }}
+    fromAddress: {{ .smtp.from }}
+    username: {{ .smtp.username }}
+    password: {{ .secrets.smtp.password }}
+    authMethod: plain
+    opensslVerifyMode: peer
+
+  secrets:
+    existingSecret: mastodon-secrets
+    existingSecretKeys:
+      secretKeyBase: secret-key-base
+      vapidPrivateKey: vapid-private-key
+      vapidPublicKey: vapid-public-key
+
+  s3:
+    hostname: {{ .subdomains.minio }}.{{ .domain }}
+    endpoint: {{ .minio.endpoint }}
+    bucket: {{ .minio.buckets.mastodon }}
+    region: {{ .minio.region }}
+    existingSecret: mastodon-secrets
+    existingSecretKeys:
+      accessKeyId: s3-access-key
+      secretAccessKey: s3-secret-key
+
+externalAuth:
+  oidc:
+    enabled: true
+    displayName: "SSO Login"
+    issuer: https://{{ .subdomains.dex }}.{{ .domain }}
+    discovery: true
+    scope: "openid,profile,email"
+    uidField: sub
+    clientId: {{ .oidc.mastodon.clientId }}
+    clientSecret: {{ .secrets.oidc.mastodon }}
+    redirectUri: https://{{ .subdomains.mastodon }}.{{ .domain }}/auth/auth/openid_connect/callback
+    assumeEmailIsVerified: true
+
+ingress:
+  enabled: true
+  className: {{ .ingressClassName }}
+  annotations:
+    cert-manager.io/cluster-issuer: {{ .certIssuer }}
+    nginx.ingress.kubernetes.io/proxy-body-size: 40m
+  hosts:
+    - host: {{ .subdomains.mastodon }}.{{ .domain }}
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: mastodon-tls
+      hosts:
+        - {{ .subdomains.mastodon }}.{{ .domain }}
+
+postgresql:
+  hostname: mastodon-postgresql
+  port: 5432
+  database: mastodon
+  existingSecret: mastodon-secrets
+  existingSecretKeys:
+    username: pg-username
+    password: pg-password
+
+redis:
+  hostname: mastodon-redis
+  port: 6379
+  existingSecret: mastodon-secrets
+  existingSecretKeys:
+    password: redis-password

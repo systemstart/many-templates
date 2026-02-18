@@ -1,0 +1,25 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: forgejo
+  namespace: forgejo
+  annotations:
+    cert-manager.io/cluster-issuer: {{ .certIssuer }}
+    nginx.ingress.kubernetes.io/proxy-body-size: 512m
+spec:
+  ingressClassName: {{ .ingressClassName }}
+  tls:
+    - hosts:
+        - {{ .subdomains.forgejo }}.{{ .domain }}
+      secretName: forgejo-tls
+  rules:
+    - host: {{ .subdomains.forgejo }}.{{ .domain }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: forgejo
+                port:
+                  number: 3000

@@ -1,0 +1,24 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: lldap
+  namespace: lldap
+  annotations:
+    cert-manager.io/cluster-issuer: {{ .certIssuer }}
+spec:
+  ingressClassName: {{ .ingressClassName }}
+  tls:
+    - hosts:
+        - {{ .subdomains.lldap }}.{{ .domain }}
+      secretName: lldap-tls
+  rules:
+    - host: {{ .subdomains.lldap }}.{{ .domain }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: lldap
+                port:
+                  number: 17170

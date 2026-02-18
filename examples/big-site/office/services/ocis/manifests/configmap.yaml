@@ -1,0 +1,24 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ocis-env
+  namespace: ocis
+data:
+  # General
+  OCIS_URL: "https://{{ .subdomains.ocis }}.{{ .domain }}"
+  OCIS_DOMAIN: "{{ .subdomains.ocis }}.{{ .domain }}"
+  OCIS_INSECURE: "false"
+  OCIS_LOG_LEVEL: "info"
+
+  # Disable built-in IDP — use external Dex
+  PROXY_OIDC_ISSUER: "https://{{ .subdomains.dex }}.{{ .domain }}"
+  OCIS_OIDC_ISSUER: "https://{{ .subdomains.dex }}.{{ .domain }}"
+  WEB_OIDC_CLIENT_ID: "{{ .oidc.ocis.clientId }}"
+  PROXY_OIDC_REWRITE_WELLKNOWN: "true"
+  PROXY_AUTOPROVISION_ACCOUNTS: "true"
+  PROXY_USER_OIDC_CLAIM: "preferred_username"
+  PROXY_USER_CS3_CLAIM: "username"
+
+  # Storage
+  OCIS_RUNTIME_PORT: "9250"
+  GATEWAY_STORAGE_USERS_MOUNT_ID: "storage-users-1"

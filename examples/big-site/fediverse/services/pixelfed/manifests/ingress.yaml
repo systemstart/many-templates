@@ -1,0 +1,25 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: pixelfed
+  namespace: pixelfed
+  annotations:
+    cert-manager.io/cluster-issuer: {{ .certIssuer }}
+    nginx.ingress.kubernetes.io/proxy-body-size: 15m
+spec:
+  ingressClassName: {{ .ingressClassName }}
+  tls:
+    - hosts:
+        - {{ .subdomains.pixelfed }}.{{ .domain }}
+      secretName: pixelfed-tls
+  rules:
+    - host: {{ .subdomains.pixelfed }}.{{ .domain }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: pixelfed
+                port:
+                  number: 80

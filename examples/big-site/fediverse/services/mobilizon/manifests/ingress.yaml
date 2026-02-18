@@ -1,0 +1,25 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: mobilizon
+  namespace: mobilizon
+  annotations:
+    cert-manager.io/cluster-issuer: {{ .certIssuer }}
+    nginx.ingress.kubernetes.io/proxy-body-size: 16m
+spec:
+  ingressClassName: {{ .ingressClassName }}
+  tls:
+    - hosts:
+        - {{ .subdomains.mobilizon }}.{{ .domain }}
+      secretName: mobilizon-tls
+  rules:
+    - host: {{ .subdomains.mobilizon }}.{{ .domain }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: mobilizon
+                port:
+                  number: 4000

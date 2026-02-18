@@ -1,0 +1,24 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: woodpecker
+  namespace: woodpecker
+  annotations:
+    cert-manager.io/cluster-issuer: {{ .certIssuer }}
+spec:
+  ingressClassName: {{ .ingressClassName }}
+  tls:
+    - hosts:
+        - {{ .subdomains.woodpecker }}.{{ .domain }}
+      secretName: woodpecker-tls
+  rules:
+    - host: {{ .subdomains.woodpecker }}.{{ .domain }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: woodpecker-server
+                port:
+                  number: 8000

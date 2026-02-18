@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: forgejo-postgres
+  namespace: forgejo
+  labels:
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/part-of: forgejo
+spec:
+  clusterIP: None
+  selector:
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/part-of: forgejo
+  ports:
+    - port: 5432
+      targetPort: 5432

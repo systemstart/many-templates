@@ -1,0 +1,7 @@
+pipeline:
+  - name: render-templates
+    type: template
+    template:
+      files:
+        include: ["**/*.yaml"]
+        exclude: [".many.yaml"]

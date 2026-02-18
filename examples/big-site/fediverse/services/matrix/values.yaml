@@ -1,0 +1,60 @@
+serverName: {{ .subdomains.matrix }}.{{ .domain }}
+publicServerName: {{ .subdomains.matrix }}.{{ .domain }}
+
+config:
+  enableRegistration: false
+  reportStats: false
+
+extraConfig:
+  oidc_providers:
+    - idp_id: dex
+      idp_name: "SSO Login"
+      issuer: https://{{ .subdomains.dex }}.{{ .domain }}
+      client_id: {{ .oidc.matrix.clientId }}
+      client_secret: {{ .secrets.oidc.matrix }}
+      scopes:
+        - openid
+        - profile
+        - email
+      user_mapping_provider:
+        config:
+          localpart_template: "{{`{{ user.preferred_username }}`}}"
+          display_name_template: "{{`{{ user.name }}`}}"
+          email_template: "{{`{{ user.email }}`}}"
+
+  email:
+    smtp_host: {{ .smtp.host }}
+    smtp_port: {{ .smtp.port }}
+    smtp_user: {{ .smtp.username }}
+    smtp_pass: {{ .secrets.smtp.password }}
+    notif_from: {{ .smtp.from }}
+
+signingKey:
+  existingSecret: synapse-secrets
+  existingSecretKey: signing.key
+
+postgresql:
+  enabled: true
+  auth:
+    existingSecret: synapse-secrets
+    database: synapse
+
+persistence:
+  enabled: true
+  storageClass: {{ .storageClass }}
+  size: {{ .storage.matrix }}
+
+ingress:
+  enabled: true
+  className: {{ .ingressClassName }}
+  annotations:
+    cert-manager.io/cluster-issuer: {{ .certIssuer }}
+  hosts:
+    - host: {{ .subdomains.matrix }}.{{ .domain }}
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: matrix-tls
+      hosts:
+        - {{ .subdomains.matrix }}.{{ .domain }}

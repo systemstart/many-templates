@@ -1,0 +1,22 @@
+version: "2"
+
+linters:
+  default: none
+  enable:
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - dupl
+    - unused
+    - gosec
+    - wrapcheck
+    - cyclop
+#    - gocyclo
+  settings:
+    gosec:
+      excludes:
+        - G204
+        - G301
+        - G304
+        - G306
