@@ -17,7 +17,29 @@
 </p>
 
 ---
-
+<!-- TOC -->
+  * [Installation](#installation)
+  * [Quick Start](#quick-start)
+  * [CLI Flags](#cli-flags)
+    * [Discovery Mode (default)](#discovery-mode-default)
+    * [Single Pipeline Mode](#single-pipeline-mode)
+    * [Instances Mode](#instances-mode)
+  * [`.many.yaml` Schema](#manyyaml-schema)
+  * [Pipeline Steps](#pipeline-steps)
+    * [`template`](#template)
+    * [`kustomize`](#kustomize)
+    * [`helm`](#helm)
+    * [`generate`](#generate)
+    * [`split`](#split)
+      * [Splitting Strategies](#splitting-strategies)
+  * [Context](#context)
+    * [Pipeline-Local Context](#pipeline-local-context)
+    * [Global Context](#global-context)
+    * [Context Value Interpolation](#context-value-interpolation)
+  * [Execution Model](#execution-model)
+  * [Examples](#examples)
+  * [Environment Variables](#environment-variables)
+<!-- TOC -->
 Many Templates recursively discovers `.many.yaml` pipeline definitions in a directory tree, copies the source to an
 output directory, and executes each pipeline in-place. Pipelines compose steps: **Go templating** (with Sprig),
 **Kustomize** builds, **Helm** renders, **file generation** from inline templates, and **YAML stream splitting**.
@@ -70,6 +92,8 @@ many \
 
 The source tree is copied to `./output`, templates are rendered in-place using the context variables, and `.many.yaml`
 files are removed from the output.
+
+Check [Examples](#Examples) for real-world example usage. 
 
 ## CLI Flags
 
