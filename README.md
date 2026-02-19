@@ -8,6 +8,14 @@
   A pipeline-based CLI tool for processing Kubernetes manifests and configuration files.
 </p>
 
+<p align="center">
+  <a href="https://github.com/systemstart/many-templates/actions/workflows/ci.yml"><img src="https://github.com/systemstart/many-templates/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://codecov.io/gh/systemstart/many-templates"><img src="https://codecov.io/gh/systemstart/many-templates/branch/main/graph/badge.svg" alt="codecov"></a>
+  <a href="https://goreportcard.com/report/github.com/systemstart/many-templates"><img src="https://goreportcard.com/badge/github.com/systemstart/many-templates" alt="Go Report Card"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPL--3.0-blue.svg" alt="License: GPL-3.0"></a>
+  <a href="https://github.com/systemstart/many-templates/releases/latest"><img src="https://img.shields.io/github/v/release/systemstart/many-templates" alt="Release"></a>
+</p>
+
 ---
 
 Many Templates recursively discovers `.many.yaml` pipeline definitions in a directory tree, copies the source to an
