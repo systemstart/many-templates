@@ -17,9 +17,15 @@
 </p>
 
 ---
+
+Many Templates recursively discovers `.many.yaml` pipeline definitions in a directory tree, copies the source to an
+output directory, and executes each pipeline in-place. Pipelines compose steps: **Go templating** (with Sprig),
+**Kustomize** builds, **Helm** renders, **file generation** from inline templates, and **YAML stream splitting**.
+
 <!-- TOC -->
   * [Installation](#installation)
   * [Quick Start](#quick-start)
+  * [Examples](#examples)
   * [CLI Flags](#cli-flags)
     * [Discovery Mode (default)](#discovery-mode-default)
     * [Single Pipeline Mode](#single-pipeline-mode)
@@ -37,12 +43,8 @@
     * [Global Context](#global-context)
     * [Context Value Interpolation](#context-value-interpolation)
   * [Execution Model](#execution-model)
-  * [Examples](#examples)
   * [Environment Variables](#environment-variables)
 <!-- TOC -->
-Many Templates recursively discovers `.many.yaml` pipeline definitions in a directory tree, copies the source to an
-output directory, and executes each pipeline in-place. Pipelines compose steps: **Go templating** (with Sprig),
-**Kustomize** builds, **Helm** renders, **file generation** from inline templates, and **YAML stream splitting**.
 
 ## Installation
 
@@ -93,7 +95,29 @@ many \
 The source tree is copied to `./output`, templates are rendered in-place using the context variables, and `.many.yaml`
 files are removed from the output.
 
-Check [Examples](#Examples) for real-world example usage. 
+## Examples
+
+**WARNING: this should only demonstrate the usage for a non-trivial project. Whether the resulting manifests provide
+a working setup is not scope of this example.**
+
+The [`examples/many-sites/`](examples/many-sites/) directory demonstrates instances mode with a real-world deployment
+configuration. A shared set of service templates is rendered for two domains --- `fediverse.example` and
+`development.example` --- each selecting a different subset of services:
+
+- **fediverse.example** --- Mastodon, Matrix/Element, Mobilizon, Pixelfed
+- **development.example** --- Forgejo, Woodpecker CI, Harbor
+
+Both instances share infrastructure services (Dex, LLDAP, ESO), a global context file for common
+configuration, and per-instance context for the domain name. External S3 and SMTP are configured globally.
+The `instances.yaml` file defines the two instances with their `include` filters and context overrides.
+
+```bash
+many \
+  -input-directory examples/many-sites/services \
+  -output-directory output \
+  -instances examples/many-sites/instances.yaml \
+  -context-file examples/many-sites/context.yaml
+```
 
 ## CLI Flags
 
@@ -170,13 +194,13 @@ instances:
       replicas: 1
 ```
 
-| Field     | Description                                                                 | Default     |
-|-----------|-----------------------------------------------------------------------------|-------------|
-| `name`    | Unique identifier for the instance                                          | required    |
-| `output`  | Output subdirectory (relative to `-output-directory`)                       | required    |
-| `input`   | Input subdirectory (relative to `-input-directory`)                         | `""` (root) |
-| `include` | List of immediate subdirectory names to include (empty = include all)       | `[]`        |
-| `context` | Additional context merged on top of global context for this instance        | `{}`        |
+| Field     | Description                                                           | Default     |
+|-----------|-----------------------------------------------------------------------|-------------|
+| `name`    | Unique identifier for the instance                                    | required    |
+| `output`  | Output subdirectory (relative to `-output-directory`)                 | required    |
+| `input`   | Input subdirectory (relative to `-input-directory`)                   | `""` (root) |
+| `include` | List of immediate subdirectory names to include (empty = include all) | `[]`        |
+| `context` | Additional context merged on top of global context for this instance  | `{}`        |
 
 **Context merge order**: `-context-file` global context -> instance `context` -> per-directory `.many.yaml` `context`.
 Instance context acts as an additional global layer for that run.
@@ -186,6 +210,7 @@ copied to the output. Root-level files are always copied. When `include` is empt
 copied.
 
 For each instance, `many`:
+
 1. Copies the input tree (filtered by `include`) to the instance output directory
 2. Merges global context with instance context
 3. Discovers and executes pipelines within the instance output
@@ -321,10 +346,10 @@ from context data, removing the need for placeholder files in the source tree.
         domain: {{ .domain }}
 ```
 
-| Field      | Description                                       | Default  |
-|------------|---------------------------------------------------|----------|
+| Field      | Description                                         | Default  |
+|------------|-----------------------------------------------------|----------|
 | `output`   | Output file path relative to the pipeline directory | required |
-| `template` | Inline Go template string                         | required |
+| `template` | Inline Go template string                           | required |
 
 Parent directories for the output path are created automatically.
 
@@ -479,30 +504,6 @@ context value fails to parse or execute as a template, the pipeline aborts with 
 
 A failing step aborts its pipeline. Other pipelines continue. A summary of failed pipelines is printed at the end, and
 the exit code is non-zero if any pipeline failed.
-
-## Examples
-
-**WARNING: this should only demonstrate the usage for a non-trivial project. Whether the resulting manifests provide
-a working setup is not scope of this example.**
-
-The [`examples/many-sites/`](examples/many-sites/) directory demonstrates instances mode with a real-world deployment
-configuration. A shared set of service templates is rendered for two domains --- `fediverse.example` and
-`development.example` --- each selecting a different subset of services:
-
-- **fediverse.example** --- Mastodon, Matrix/Element, Mobilizon, Pixelfed
-- **development.example** --- Forgejo, Woodpecker CI, Harbor
-
-Both instances share infrastructure services (Dex, LLDAP, ESO), a global context file for common
-configuration, and per-instance context for the domain name. External S3 and SMTP are configured globally.
-The `instances.yaml` file defines the two instances with their `include` filters and context overrides.
-
-```bash
-many \
-  -input-directory examples/many-sites/services \
-  -output-directory output \
-  -instances examples/many-sites/instances.yaml \
-  -context-file examples/many-sites/context.yaml
-```
 
 ## Environment Variables
 
