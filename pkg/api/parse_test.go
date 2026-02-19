@@ -30,7 +30,7 @@ pipeline:
 `
 	dir := t.TempDir()
 	f := filepath.Join(dir, ".many.yaml")
-	if err := os.WriteFile(f, []byte(content), 0600); err != nil {
+	if err := os.WriteFile(f, []byte(content), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -63,7 +63,7 @@ func TestLoadPipeline_FileNotFound(t *testing.T) {
 func TestLoadPipeline_InvalidYAML(t *testing.T) {
 	dir := t.TempDir()
 	f := filepath.Join(dir, ".many.yaml")
-	if err := os.WriteFile(f, []byte("{{invalid"), 0600); err != nil {
+	if err := os.WriteFile(f, []byte("{{invalid"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -84,7 +84,7 @@ pipeline:
 `
 	dir := t.TempDir()
 	f := filepath.Join(dir, ".many.yaml")
-	if err := os.WriteFile(f, []byte(content), 0600); err != nil {
+	if err := os.WriteFile(f, []byte(content), 0o600); err != nil {
 		t.Fatal(err)
 	}
 

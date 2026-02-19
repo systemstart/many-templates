@@ -12,11 +12,14 @@ linters:
     - gosec
     - wrapcheck
     - cyclop
-#    - gocyclo
   settings:
     gosec:
       excludes:
-        - G204
-        - G301
-        - G304
-        - G306
+        - G204 # subprocess launched with variable — needed for kustomize/helm exec
+        - G301 # directory created with permissions > 0750 — acceptable for output dirs
+        - G304 # file path from variable — unavoidable for user-provided input/output paths
+        - G306 # file written with permissions > 0600 — output files need standard read perms
+
+formatters:
+  enable:
+    - gofumpt

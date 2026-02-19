@@ -22,25 +22,25 @@ func setupDiscoverTree(t *testing.T) string {
 	root := t.TempDir()
 
 	// root/.many.yaml
-	if err := os.WriteFile(filepath.Join(root, ".many.yaml"), []byte(validPipeline), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(root, ".many.yaml"), []byte(validPipeline), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
 	// root/child/.many.yaml
 	child := filepath.Join(root, "child")
-	if err := os.MkdirAll(child, 0750); err != nil {
+	if err := os.MkdirAll(child, 0o750); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(child, ".many.yaml"), []byte(validPipeline), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(child, ".many.yaml"), []byte(validPipeline), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
 	// root/child/grandchild/.many.yaml
 	grandchild := filepath.Join(child, "grandchild")
-	if err := os.MkdirAll(grandchild, 0750); err != nil {
+	if err := os.MkdirAll(grandchild, 0o750); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(grandchild, ".many.yaml"), []byte(validPipeline), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(grandchild, ".many.yaml"), []byte(validPipeline), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -106,7 +106,7 @@ func TestDiscoverPipelines_NoPipelines(t *testing.T) {
 
 func TestDiscoverPipelines_InvalidPipeline(t *testing.T) {
 	root := t.TempDir()
-	if err := os.WriteFile(filepath.Join(root, ".many.yaml"), []byte("{{invalid"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(root, ".many.yaml"), []byte("{{invalid"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 

@@ -9,7 +9,7 @@ import (
 func TestLoadContextFile(t *testing.T) {
 	dir := t.TempDir()
 	f := filepath.Join(dir, "context.yaml")
-	if err := os.WriteFile(f, []byte("domain: example.com\nport: 8080\n"), 0600); err != nil {
+	if err := os.WriteFile(f, []byte("domain: example.com\nport: 8080\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -29,7 +29,7 @@ func TestLoadContextFile(t *testing.T) {
 func TestLoadContextFile_Empty(t *testing.T) {
 	dir := t.TempDir()
 	f := filepath.Join(dir, "context.yaml")
-	if err := os.WriteFile(f, []byte(""), 0600); err != nil {
+	if err := os.WriteFile(f, []byte(""), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -56,7 +56,7 @@ func TestLoadContextFile_NotFound(t *testing.T) {
 func TestLoadContextFile_InvalidYAML(t *testing.T) {
 	dir := t.TempDir()
 	f := filepath.Join(dir, "context.yaml")
-	if err := os.WriteFile(f, []byte("{{invalid"), 0600); err != nil {
+	if err := os.WriteFile(f, []byte("{{invalid"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 

@@ -51,7 +51,7 @@ resources:
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			dir := t.TempDir()
-			if err := os.WriteFile(filepath.Join(dir, "kustomization.yaml"), []byte(tt.yaml), 0600); err != nil {
+			if err := os.WriteFile(filepath.Join(dir, "kustomization.yaml"), []byte(tt.yaml), 0o600); err != nil {
 				t.Fatal(err)
 			}
 
@@ -119,7 +119,7 @@ func TestKustomizeStep_RunSubdir(t *testing.T) {
 
 	dir := t.TempDir()
 	sub := filepath.Join(dir, "overlay")
-	if err := os.MkdirAll(sub, 0750); err != nil {
+	if err := os.MkdirAll(sub, 0o750); err != nil {
 		t.Fatal(err)
 	}
 	writeTestFile(t, sub, "kustomization.yaml", `apiVersion: kustomize.config.k8s.io/v1beta1

@@ -98,7 +98,7 @@ func writeKustomization(workDir, outputDirRel string, assignments map[string][]M
 	}
 
 	kustomizationPath := filepath.Join(workDir, "kustomization.yaml")
-	if err := os.WriteFile(kustomizationPath, buf.Bytes(), 0600); err != nil {
+	if err := os.WriteFile(kustomizationPath, buf.Bytes(), 0o600); err != nil {
 		return fmt.Errorf("writing kustomization.yaml: %w", err)
 	}
 	slog.Debug("split wrote kustomization.yaml", "path", kustomizationPath, "resources", len(paths))
@@ -108,13 +108,13 @@ func writeKustomization(workDir, outputDirRel string, assignments map[string][]M
 func writeAssignments(outputDir string, assignments map[string][]Manifest) error {
 	for relPath, docs := range assignments {
 		absPath := filepath.Join(outputDir, relPath)
-		if err := os.MkdirAll(filepath.Dir(absPath), 0750); err != nil {
+		if err := os.MkdirAll(filepath.Dir(absPath), 0o750); err != nil {
 			return fmt.Errorf("creating directory for %s: %w", relPath, err)
 		}
 
 		data := marshalDocs(docs)
 
-		if err := os.WriteFile(absPath, data, 0600); err != nil {
+		if err := os.WriteFile(absPath, data, 0o600); err != nil {
 			return fmt.Errorf("writing %s: %w", relPath, err)
 		}
 		slog.Debug("split wrote file", "path", relPath, "manifests", len(docs))

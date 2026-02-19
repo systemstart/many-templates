@@ -11,7 +11,7 @@ import (
 
 func TestRunPipeline_ContextMerge(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "test.yaml"), []byte("{{ .global }}-{{ .local }}"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "test.yaml"), []byte("{{ .global }}-{{ .local }}"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -74,13 +74,13 @@ func TestCopyTree(t *testing.T) {
 	dst := t.TempDir()
 
 	// Create source files
-	if err := os.MkdirAll(filepath.Join(src, "sub"), 0750); err != nil {
+	if err := os.MkdirAll(filepath.Join(src, "sub"), 0o750); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(src, "a.txt"), []byte("hello"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(src, "a.txt"), []byte("hello"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(src, "sub", "b.txt"), []byte("world"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(src, "sub", "b.txt"), []byte("world"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -109,16 +109,16 @@ func TestCopyTree(t *testing.T) {
 func TestRemoveConfigFiles(t *testing.T) {
 	root := t.TempDir()
 
-	if err := os.MkdirAll(filepath.Join(root, "sub"), 0750); err != nil {
+	if err := os.MkdirAll(filepath.Join(root, "sub"), 0o750); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(root, ".many.yaml"), []byte("test"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(root, ".many.yaml"), []byte("test"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(root, "sub", ".many.yaml"), []byte("test"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "sub", ".many.yaml"), []byte("test"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(root, "keep.yaml"), []byte("test"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "keep.yaml"), []byte("test"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -151,10 +151,10 @@ pipeline:
     template:
       files:
         include: ["*.txt"]
-`), 0600); err != nil {
+`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(src, "hello.txt"), []byte("Hello {{ .name }}!"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(src, "hello.txt"), []byte("Hello {{ .name }}!"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -181,7 +181,7 @@ func TestRunAll_NoPipelines(t *testing.T) {
 	src := t.TempDir()
 	dst := filepath.Join(t.TempDir(), "output")
 
-	if err := os.WriteFile(filepath.Join(src, "file.txt"), []byte("content"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(src, "file.txt"), []byte("content"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -205,7 +205,7 @@ func TestRemoveBuildArtifacts(t *testing.T) {
 	// Create files and directories that represent build artifacts
 	writeFile := func(name, content string) {
 		t.Helper()
-		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0600); err != nil {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o600); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -213,12 +213,12 @@ func TestRemoveBuildArtifacts(t *testing.T) {
 	writeFile("values.yaml", "key: val")
 	writeFile("secret.yaml", "apiVersion: v1")
 
-	if err := os.MkdirAll(filepath.Join(dir, "charts", "test"), 0750); err != nil {
+	if err := os.MkdirAll(filepath.Join(dir, "charts", "test"), 0o750); err != nil {
 		t.Fatal(err)
 	}
 	writeFile("charts/test/Chart.yaml", "name: test")
 
-	if err := os.MkdirAll(filepath.Join(dir, "manifests"), 0750); err != nil {
+	if err := os.MkdirAll(filepath.Join(dir, "manifests"), 0o750); err != nil {
 		t.Fatal(err)
 	}
 	writeFile("manifests/deploy.yaml", "apiVersion: apps/v1")
@@ -258,10 +258,10 @@ pipeline:
       files:
         include: ["*.yaml"]
         exclude: [".many.yaml"]
-`), 0600); err != nil {
+`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(src, "data.yaml"), []byte("value: {{ .v }}"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(src, "data.yaml"), []byte("value: {{ .v }}"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -287,10 +287,10 @@ pipeline:
 func TestRelativeToInput(t *testing.T) {
 	inputDir := t.TempDir()
 	inner := filepath.Join(inputDir, "sub", "file.yaml")
-	if err := os.MkdirAll(filepath.Join(inputDir, "sub"), 0750); err != nil {
+	if err := os.MkdirAll(filepath.Join(inputDir, "sub"), 0o750); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(inner, []byte("test"), 0600); err != nil {
+	if err := os.WriteFile(inner, []byte("test"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -305,7 +305,7 @@ func TestRelativeToInput(t *testing.T) {
 
 	// File outside input dir
 	outside := filepath.Join(t.TempDir(), "other.yaml")
-	if err := os.WriteFile(outside, []byte("test"), 0600); err != nil {
+	if err := os.WriteFile(outside, []byte("test"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	_, ok = relativeToInput(outside, inputDir)
@@ -315,7 +315,7 @@ func TestRelativeToInput(t *testing.T) {
 
 	// File at input root
 	root := filepath.Join(inputDir, "root.yaml")
-	if err := os.WriteFile(root, []byte("test"), 0600); err != nil {
+	if err := os.WriteFile(root, []byte("test"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	rel, ok = relativeToInput(root, inputDir)
@@ -332,10 +332,10 @@ func TestRemoveContextFile(t *testing.T) {
 	dst := t.TempDir()
 
 	// Create context file in both src and dst
-	if err := os.WriteFile(filepath.Join(src, "context.yaml"), []byte("key: val"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(src, "context.yaml"), []byte("key: val"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dst, "context.yaml"), []byte("key: val"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dst, "context.yaml"), []byte("key: val"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -351,10 +351,10 @@ func TestRemoveContextFile(t *testing.T) {
 
 	// Context file outside input dir is a no-op
 	outside := filepath.Join(t.TempDir(), "external.yaml")
-	if err := os.WriteFile(outside, []byte("test"), 0600); err != nil {
+	if err := os.WriteFile(outside, []byte("test"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dst, "external.yaml"), []byte("test"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dst, "external.yaml"), []byte("test"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	removeContextFile(outside, src, dst)
@@ -379,13 +379,13 @@ pipeline:
     template:
       files:
         include: ["*.txt"]
-`), 0600); err != nil {
+`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(src, "hello.txt"), []byte("Hello {{ .name }}!"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(src, "hello.txt"), []byte("Hello {{ .name }}!"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(src, "context.yaml"), []byte("name: world"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(src, "context.yaml"), []byte("name: world"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -421,15 +421,15 @@ pipeline:
     template:
       files:
         include: ["*.txt"]
-`), 0600); err != nil {
+`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(src, "root.txt"), []byte("root"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(src, "root.txt"), []byte("root"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
 	sub := filepath.Join(src, "sub")
-	if err := os.MkdirAll(sub, 0750); err != nil {
+	if err := os.MkdirAll(sub, 0o750); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(sub, ".many.yaml"), []byte(`
@@ -441,10 +441,10 @@ pipeline:
     template:
       files:
         include: ["*.txt"]
-`), 0600); err != nil {
+`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(sub, "deep.txt"), []byte("{{ .val }}"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(sub, "deep.txt"), []byte("{{ .val }}"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -477,13 +477,13 @@ pipeline:
       files:
         include: ["*.yaml"]
         exclude: [".many.yaml", "context.yaml"]
-`), 0600); err != nil {
+`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(src, "data.yaml"), []byte("value: {{ .v }}"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(src, "data.yaml"), []byte("value: {{ .v }}"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(src, "context.yaml"), []byte("v: ok"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(src, "context.yaml"), []byte("v: ok"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -510,7 +510,7 @@ func TestRunSingle_NonexistentPipelineFile(t *testing.T) {
 	src := t.TempDir()
 	dst := filepath.Join(t.TempDir(), "output")
 
-	if err := os.WriteFile(filepath.Join(src, "file.txt"), []byte("content"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(src, "file.txt"), []byte("content"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -532,10 +532,10 @@ pipeline:
     template:
       files:
         include: ["*.txt"]
-`), 0600); err != nil {
+`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(src, "bad.txt"), []byte("{{ .missing | fail }}"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(src, "bad.txt"), []byte("{{ .missing | fail }}"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 

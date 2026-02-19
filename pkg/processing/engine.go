@@ -152,7 +152,7 @@ func copyTree(src, dst string) error {
 		target := filepath.Join(dst, rel)
 
 		if d.IsDir() {
-			return os.MkdirAll(target, 0750)
+			return os.MkdirAll(target, 0o750)
 		}
 
 		data, readErr := os.ReadFile(path)

@@ -47,5 +47,4 @@ func Initialize(loggingType string, logLevelName string) error {
 	slog.SetDefault(slog.New(logHandler))
 	slog.Info("logging initialized", "logLevel", logLevel)
 	return nil
-
 }

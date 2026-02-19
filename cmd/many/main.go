@@ -202,7 +202,7 @@ func ensureOutputDirectory() {
 		}
 	}
 
-	err = os.MkdirAll(outputDirectory, 0750)
+	err = os.MkdirAll(outputDirectory, 0o750)
 	if err != nil {
 		slog.Error("failed to create output directory", "directory", outputDirectory, "error", err)
 		os.Exit(exitOutputDirectoryCreateFailed)

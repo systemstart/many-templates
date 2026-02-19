@@ -15,7 +15,7 @@ func createTestChart(t *testing.T, dir, templateName, templateContent string) {
 	t.Helper()
 	chart := filepath.Join(dir, "test-chart")
 	tmplDir := filepath.Join(chart, "templates")
-	if err := os.MkdirAll(tmplDir, 0750); err != nil {
+	if err := os.MkdirAll(tmplDir, 0o750); err != nil {
 		t.Fatal(err)
 	}
 	writeTestFile(t, chart, "Chart.yaml", "apiVersion: v2\nname: test-chart\nversion: 0.1.0\n")

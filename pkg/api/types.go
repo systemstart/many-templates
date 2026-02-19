@@ -27,12 +27,12 @@ type Pipeline struct {
 
 // StepConfig defines a single step within a pipeline.
 type StepConfig struct {
-	Name      string          `yaml:"name"`
-	Type      string          `yaml:"type"`
-	Template  *TemplateConfig `yaml:"template,omitempty"`
+	Name      string           `yaml:"name"`
+	Type      string           `yaml:"type"`
+	Template  *TemplateConfig  `yaml:"template,omitempty"`
 	Kustomize *KustomizeConfig `yaml:"kustomize,omitempty"`
-	Helm      *HelmConfig     `yaml:"helm,omitempty"`
-	Split     *SplitConfig    `yaml:"split,omitempty"`
+	Helm      *HelmConfig      `yaml:"helm,omitempty"`
+	Split     *SplitConfig     `yaml:"split,omitempty"`
 }
 
 // FileFilter defines include/exclude glob patterns.

@@ -11,7 +11,7 @@ import (
 
 func TestTemplateStep_Run(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "test.yaml"), []byte("host: {{ .domain }}"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "test.yaml"), []byte("host: {{ .domain }}"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -43,13 +43,13 @@ func TestTemplateStep_Run(t *testing.T) {
 
 func TestTemplateStep_DefaultInclude(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(dir, "sub"), 0750); err != nil {
+	if err := os.MkdirAll(filepath.Join(dir, "sub"), 0o750); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "a.yaml"), []byte("v: {{ .x }}"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "a.yaml"), []byte("v: {{ .x }}"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "sub", "b.yaml"), []byte("w: {{ .x }}"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "sub", "b.yaml"), []byte("w: {{ .x }}"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -76,10 +76,10 @@ func TestTemplateStep_DefaultInclude(t *testing.T) {
 
 func TestTemplateStep_Exclude(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "include.yaml"), []byte("v: {{ .x }}"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "include.yaml"), []byte("v: {{ .x }}"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "exclude.yaml"), []byte("v: {{ .x }}"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "exclude.yaml"), []byte("v: {{ .x }}"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -112,7 +112,7 @@ func TestTemplateStep_Exclude(t *testing.T) {
 
 func TestTemplateStep_SprigFunctions(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "test.yaml"), []byte(`v: {{ "hello" | upper }}`), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "test.yaml"), []byte(`v: {{ "hello" | upper }}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -137,7 +137,7 @@ func TestTemplateStep_SprigFunctions(t *testing.T) {
 
 func TestTemplateStep_InvalidTemplateSyntax(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "bad.yaml"), []byte("v: {{ .unclosed"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "bad.yaml"), []byte("v: {{ .unclosed"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -161,7 +161,7 @@ func TestTemplateStep_InvalidTemplateSyntax(t *testing.T) {
 
 func TestTemplateStep_TemplateExecutionError(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "bad.yaml"), []byte(`{{ fail "boom" }}`), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "bad.yaml"), []byte(`{{ fail "boom" }}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -185,7 +185,7 @@ func TestTemplateStep_TemplateExecutionError(t *testing.T) {
 
 func TestTemplateStep_NoMatchingFiles(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "test.txt"), []byte("plain text"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "test.txt"), []byte("plain text"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -207,7 +207,7 @@ func TestTemplateStep_NoMatchingFiles(t *testing.T) {
 
 func TestTemplateStep_ExcludeAll(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "a.yaml"), []byte("v: {{ .x }}"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "a.yaml"), []byte("v: {{ .x }}"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 

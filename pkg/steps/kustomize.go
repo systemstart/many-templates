@@ -69,8 +69,8 @@ func (s *kustomizeStep) Run(ctx StepContext) (*StepResult, error) {
 
 // kustomizationFile is a minimal representation for collecting cleanup paths.
 type kustomizationFile struct {
-	Resources  []string          `yaml:"resources"`
-	HelmCharts []helmChartEntry  `yaml:"helmCharts"`
+	Resources  []string         `yaml:"resources"`
+	HelmCharts []helmChartEntry `yaml:"helmCharts"`
 }
 
 type helmChartEntry struct {
