@@ -5,13 +5,19 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"runtime/debug"
 
 	"github.com/joho/godotenv"
 	"github.com/systemstart/many-templates/pkg/logging"
 	"github.com/systemstart/many-templates/pkg/processing"
 )
 
-var version = "dev"
+var version = func() string {
+	if info, ok := debug.ReadBuildInfo(); ok && info.Main.Version != "" && info.Main.Version != "(devel)" {
+		return info.Main.Version
+	}
+	return "dev"
+}()
 
 const (
 	_ = iota
