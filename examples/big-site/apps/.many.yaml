@@ -1,7 +1,244 @@
 pipeline:
-  - name: render-templates
-    type: template
-    template:
-      files:
-        include: ["**/*.yaml"]
-        exclude: [".many.yaml"]
+  - name: app-of-apps
+    type: generate
+    generate:
+      output: app-of-apps.yaml
+      template: |
+        apiVersion: argoproj.io/v1alpha1
+        kind: Application
+        metadata:
+          name: site-apps
+          namespace: argocd
+          finalizers:
+            - resources-finalizer.argocd.argoproj.io
+        spec:
+          project: {{ .argocd.project }}
+          source:
+            repoURL: {{ .argocd.repoURL }}
+            targetRevision: {{ .argocd.targetRevision }}
+            path: {{ .argocd.basePath }}/apps
+          destination:
+            server: https://kubernetes.default.svc
+            namespace: argocd
+          syncPolicy:
+            automated:
+              prune: true
+              selfHeal: true
+
+  - name: argocd
+    type: generate
+    generate:
+      output: argocd.yaml
+      template: |
+        apiVersion: argoproj.io/v1alpha1
+        kind: Application
+        metadata:
+          name: argocd
+          namespace: argocd
+          finalizers:
+            - resources-finalizer.argocd.argoproj.io
+        spec:
+          project: {{ .argocd.project }}
+          source:
+            repoURL: {{ .argocd.repoURL }}
+            targetRevision: {{ .argocd.targetRevision }}
+            path: {{ .argocd.basePath }}/infrastructure/argocd
+          destination:
+            server: https://kubernetes.default.svc
+            namespace: argocd
+          syncPolicy:
+            automated:
+              prune: true
+              selfHeal: true
+            syncOptions:
+              - CreateNamespace=true
+
+  - name: dex
+    type: generate
+    generate:
+      output: dex.yaml
+      template: |
+        apiVersion: argoproj.io/v1alpha1
+        kind: Application
+        metadata:
+          name: dex
+          namespace: argocd
+          finalizers:
+            - resources-finalizer.argocd.argoproj.io
+        spec:
+          project: {{ .argocd.project }}
+          source:
+            repoURL: {{ .argocd.repoURL }}
+            targetRevision: {{ .argocd.targetRevision }}
+            path: {{ .argocd.basePath }}/infrastructure/dex
+          destination:
+            server: https://kubernetes.default.svc
+            namespace: dex
+          syncPolicy:
+            automated:
+              prune: true
+              selfHeal: true
+            syncOptions:
+              - CreateNamespace=true
+
+  - name: eso
+    type: generate
+    generate:
+      output: eso.yaml
+      template: |
+        apiVersion: argoproj.io/v1alpha1
+        kind: Application
+        metadata:
+          name: external-secrets
+          namespace: argocd
+          finalizers:
+            - resources-finalizer.argocd.argoproj.io
+        spec:
+          project: {{ .argocd.project }}
+          source:
+            repoURL: {{ .argocd.repoURL }}
+            targetRevision: {{ .argocd.targetRevision }}
+            path: {{ .argocd.basePath }}/infrastructure/eso
+          destination:
+            server: https://kubernetes.default.svc
+            namespace: external-secrets
+          syncPolicy:
+            automated:
+              prune: true
+              selfHeal: true
+            syncOptions:
+              - CreateNamespace=true
+
+  - name: fediverse
+    type: generate
+    generate:
+      output: fediverse.yaml
+      template: |
+        apiVersion: argoproj.io/v1alpha1
+        kind: Application
+        metadata:
+          name: fediverse
+          namespace: argocd
+          finalizers:
+            - resources-finalizer.argocd.argoproj.io
+        spec:
+          project: {{ .argocd.project }}
+          source:
+            repoURL: {{ .argocd.repoURL }}
+            targetRevision: {{ .argocd.targetRevision }}
+            path: {{ .argocd.basePath }}/fediverse/apps
+          destination:
+            server: https://kubernetes.default.svc
+            namespace: argocd
+          syncPolicy:
+            automated:
+              prune: true
+              selfHeal: true
+
+  - name: lldap
+    type: generate
+    generate:
+      output: lldap.yaml
+      template: |
+        apiVersion: argoproj.io/v1alpha1
+        kind: Application
+        metadata:
+          name: lldap
+          namespace: argocd
+          finalizers:
+            - resources-finalizer.argocd.argoproj.io
+        spec:
+          project: {{ .argocd.project }}
+          source:
+            repoURL: {{ .argocd.repoURL }}
+            targetRevision: {{ .argocd.targetRevision }}
+            path: {{ .argocd.basePath }}/infrastructure/lldap
+          destination:
+            server: https://kubernetes.default.svc
+            namespace: lldap
+          syncPolicy:
+            automated:
+              prune: true
+              selfHeal: true
+            syncOptions:
+              - CreateNamespace=true
+
+  - name: minio
+    type: generate
+    generate:
+      output: minio.yaml
+      template: |
+        apiVersion: argoproj.io/v1alpha1
+        kind: Application
+        metadata:
+          name: minio
+          namespace: argocd
+          finalizers:
+            - resources-finalizer.argocd.argoproj.io
+        spec:
+          project: {{ .argocd.project }}
+          source:
+            repoURL: {{ .argocd.repoURL }}
+            targetRevision: {{ .argocd.targetRevision }}
+            path: {{ .argocd.basePath }}/infrastructure/minio
+          destination:
+            server: https://kubernetes.default.svc
+            namespace: minio
+          syncPolicy:
+            automated:
+              prune: true
+              selfHeal: true
+            syncOptions:
+              - CreateNamespace=true
+
+  - name: office
+    type: generate
+    generate:
+      output: office.yaml
+      template: |
+        apiVersion: argoproj.io/v1alpha1
+        kind: Application
+        metadata:
+          name: office
+          namespace: argocd
+          finalizers:
+            - resources-finalizer.argocd.argoproj.io
+        spec:
+          project: {{ .argocd.project }}
+          source:
+            repoURL: {{ .argocd.repoURL }}
+            targetRevision: {{ .argocd.targetRevision }}
+            path: {{ .argocd.basePath }}/office/apps
+          destination:
+            server: https://kubernetes.default.svc
+            namespace: argocd
+          syncPolicy:
+            automated:
+              prune: true
+              selfHeal: true
+
+  - name: sdp
+    type: generate
+    generate:
+      output: sdp.yaml
+      template: |
+        apiVersion: argoproj.io/v1alpha1
+        kind: Application
+        metadata:
+          name: sdp
+          namespace: argocd
+          finalizers:
+            - resources-finalizer.argocd.argoproj.io
+        spec:
+          project: {{ .argocd.project }}
+          source:
+            repoURL: {{ .argocd.repoURL }}
+            targetRevision: {{ .argocd.targetRevision }}
+            path: {{ .argocd.basePath }}/sdp/apps
+          destination:
+            server: https://kubernetes.default.svc
+            namespace: argocd
+          syncPolicy:
+            automated:
+              prune: true
+              selfHeal: true
