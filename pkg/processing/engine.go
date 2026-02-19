@@ -148,7 +148,80 @@ func RunSingle(pipelineFile, inputDir, outputDir string, globalContext map[strin
 	return nil
 }
 
-func copyTree(src, dst string) error {
+// RunInstances processes each instance: filtered copy, pipeline discovery, execution.
+func RunInstances(cfg *api.InstancesConfig, inputDir, outputDir string, globalContext map[string]any, maxDepth int, contextFile string) error {
+	var failed []string
+
+	for _, inst := range cfg.Instances {
+		slog.Info("processing instance", "name", inst.Name)
+
+		if err := runInstance(inst, inputDir, outputDir, globalContext, maxDepth, contextFile); err != nil {
+			slog.Error("instance failed", "name", inst.Name, "error", err)
+			failed = append(failed, inst.Name)
+		}
+	}
+
+	if len(failed) > 0 {
+		return fmt.Errorf("%d instance(s) failed: %v", len(failed), failed)
+	}
+
+	return nil
+}
+
+func runInstance(inst api.Instance, inputDir, outputDir string, globalContext map[string]any, maxDepth int, contextFile string) error {
+	instInputDir := inputDir
+	if inst.Input != "" {
+		instInputDir = filepath.Join(inputDir, inst.Input)
+	}
+	instOutputDir := filepath.Join(outputDir, inst.Output)
+	instContext := MergeContext(globalContext, inst.Context)
+
+	if err := copyTreeFiltered(instInputDir, instOutputDir, inst.Include); err != nil {
+		return fmt.Errorf("copying tree: %w", err)
+	}
+
+	removeContextFile(contextFile, instInputDir, instOutputDir)
+
+	pipelines, err := DiscoverPipelines(instOutputDir, maxDepth)
+	if err != nil {
+		return fmt.Errorf("discovering pipelines: %w", err)
+	}
+
+	if len(pipelines) == 0 {
+		slog.Warn("no .many.yaml files found for instance", "name", inst.Name)
+	}
+
+	slog.Info("discovered pipelines for instance", "name", inst.Name, "count", len(pipelines))
+
+	var pipelineFailed bool
+	for _, p := range pipelines {
+		slog.Info("executing pipeline", "instance", inst.Name, "path", p.FilePath)
+		if pErr := RunPipeline(p, instContext); pErr != nil {
+			slog.Error("pipeline failed", "instance", inst.Name, "path", p.FilePath, "error", pErr)
+			pipelineFailed = true
+		}
+	}
+
+	if err := removeConfigFiles(instOutputDir); err != nil {
+		slog.Error("failed to clean up .many.yaml files", "instance", inst.Name, "error", err)
+	}
+
+	if pipelineFailed {
+		return fmt.Errorf("one or more pipelines failed")
+	}
+	return nil
+}
+
+func copyTreeFiltered(src, dst string, include []string) error {
+	if len(include) == 0 {
+		return copyTree(src, dst)
+	}
+
+	includeSet := make(map[string]bool, len(include))
+	for _, name := range include {
+		includeSet[name] = true
+	}
+
 	err := filepath.WalkDir(src, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return fmt.Errorf("walk error at %s: %w", path, err)
@@ -158,26 +231,59 @@ func copyTree(src, dst string) error {
 		if relErr != nil {
 			return fmt.Errorf("computing relative path for %s: %w", path, relErr)
 		}
-		target := filepath.Join(dst, rel)
 
-		if d.IsDir() {
-			return os.MkdirAll(target, 0o750)
+		// Filter immediate subdirectories of root.
+		if d.IsDir() && filepath.Dir(rel) == "." && rel != "." && !includeSet[d.Name()] {
+			return filepath.SkipDir
 		}
 
-		data, readErr := os.ReadFile(path)
-		if readErr != nil {
-			return fmt.Errorf("reading %s: %w", path, readErr)
-		}
+		return copyEntry(dst, rel, path, d)
+	})
+	if err != nil {
+		return fmt.Errorf("copying filtered tree: %w", err)
+	}
+	return nil
+}
 
-		info, statErr := d.Info()
-		if statErr != nil {
-			return fmt.Errorf("stat %s: %w", path, statErr)
+func copyTree(src, dst string) error {
+	err := filepath.WalkDir(src, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return fmt.Errorf("walk error at %s: %w", path, err)
 		}
-
-		return os.WriteFile(target, data, info.Mode())
+		rel, relErr := filepath.Rel(src, path)
+		if relErr != nil {
+			return fmt.Errorf("computing relative path for %s: %w", path, relErr)
+		}
+		return copyEntry(dst, rel, path, d)
 	})
 	if err != nil {
 		return fmt.Errorf("copying tree: %w", err)
+	}
+	return nil
+}
+
+func copyEntry(dst, rel, srcPath string, d fs.DirEntry) error {
+	target := filepath.Join(dst, rel)
+
+	if d.IsDir() {
+		if err := os.MkdirAll(target, 0o750); err != nil {
+			return fmt.Errorf("creating directory %s: %w", target, err)
+		}
+		return nil
+	}
+
+	data, err := os.ReadFile(srcPath)
+	if err != nil {
+		return fmt.Errorf("reading %s: %w", srcPath, err)
+	}
+
+	info, err := d.Info()
+	if err != nil {
+		return fmt.Errorf("stat %s: %w", srcPath, err)
+	}
+
+	if err := os.WriteFile(target, data, info.Mode()); err != nil {
+		return fmt.Errorf("writing %s: %w", target, err)
 	}
 	return nil
 }

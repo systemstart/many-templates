@@ -10,6 +10,7 @@ var validStepTypes = map[string]bool{
 	StepTypeKustomize: true,
 	StepTypeHelm:      true,
 	StepTypeSplit:     true,
+	StepTypeGenerate:  true,
 }
 
 var validSplitStrategies = map[string]bool{
@@ -68,6 +69,8 @@ func validateStepConfig(step StepConfig, outputProducers map[string]bool) error 
 		return validateHelmConfig(step)
 	case StepTypeSplit:
 		return validateSplitConfig(step, outputProducers)
+	case StepTypeGenerate:
+		return validateGenerateConfig(step)
 	}
 	return nil
 }
@@ -81,6 +84,19 @@ func validateHelmConfig(step StepConfig) error {
 	}
 	if step.Helm.ReleaseName == "" {
 		return fmt.Errorf("helm.releaseName is required")
+	}
+	return nil
+}
+
+func validateGenerateConfig(step StepConfig) error {
+	if step.Generate == nil {
+		return fmt.Errorf("generate config is required")
+	}
+	if step.Generate.Output == "" {
+		return fmt.Errorf("generate.output is required")
+	}
+	if step.Generate.Template == "" {
+		return fmt.Errorf("generate.template is required")
 	}
 	return nil
 }

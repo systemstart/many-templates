@@ -81,6 +81,7 @@ files are removed from the output.
 | `-context-file`               | Global context YAML file (removed from output if inside input)    | none     |
 | `-max-depth`                  | Max directory recursion depth (`-1` = unlimited, `0` = root only) | `-1`     |
 | `-processing`                 | Single `.many.yaml` to run (skips directory discovery)            | none     |
+| `-instances`                  | Instances YAML file for matrix mode                               | none     |
 | `-log-level`                  | `debug`, `info`, `warn`, `error`                                  | `info`   |
 | `-logging-type`               | `json`, `text`, `tint`                                            | `tint`   |
 
@@ -106,6 +107,67 @@ many \
   -input-directory ./infrastructure \
   -output-directory ./output
 ```
+
+### Instances Mode
+
+When `-instances` points to an instances YAML file, `many` runs the same input tree (or a filtered subset) multiple
+times with different contexts, producing separate output directories. This is useful when you have a shared set of
+templates that need to be rendered for multiple environments, domains, or tenants.
+
+`-instances` is incompatible with `-processing`.
+
+```bash
+many \
+  -input-directory ./applications \
+  -output-directory ./output \
+  -instances instances.yaml \
+  -context-file global.yaml
+```
+
+The instances file defines a list of instances, each with a name, output directory, optional input subdirectory,
+optional include filter, and optional context:
+
+```yaml
+instances:
+  - name: prod-east
+    output: prod-east/
+    include:
+      - api
+      - frontend
+    context:
+      region: us-east-1
+      replicas: 3
+
+  - name: staging
+    input: staging-apps/
+    output: staging/
+    context:
+      region: us-west-2
+      replicas: 1
+```
+
+| Field     | Description                                                                 | Default     |
+|-----------|-----------------------------------------------------------------------------|-------------|
+| `name`    | Unique identifier for the instance                                          | required    |
+| `output`  | Output subdirectory (relative to `-output-directory`)                       | required    |
+| `input`   | Input subdirectory (relative to `-input-directory`)                         | `""` (root) |
+| `include` | List of immediate subdirectory names to include (empty = include all)       | `[]`        |
+| `context` | Additional context merged on top of global context for this instance        | `{}`        |
+
+**Context merge order**: `-context-file` global context -> instance `context` -> per-directory `.many.yaml` `context`.
+Instance context acts as an additional global layer for that run.
+
+**Include filtering**: When `include` is specified, only the listed immediate subdirectories of the input directory are
+copied to the output. Root-level files are always copied. When `include` is empty or absent, the entire input tree is
+copied.
+
+For each instance, `many`:
+1. Copies the input tree (filtered by `include`) to the instance output directory
+2. Merges global context with instance context
+3. Discovers and executes pipelines within the instance output
+4. Removes `.many.yaml` files from the instance output
+
+If an instance fails, remaining instances still run. A summary of failed instances is reported at the end.
 
 ## `.many.yaml` Schema
 

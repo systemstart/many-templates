@@ -216,6 +216,69 @@ func TestValidate_SplitCustomWithoutTemplate(t *testing.T) {
 	}
 }
 
+func TestValidate_ValidGenerateStep(t *testing.T) {
+	p := &Pipeline{
+		Pipeline: []StepConfig{
+			{
+				Name: "gen",
+				Type: StepTypeGenerate,
+				Generate: &GenerateConfig{
+					Output:   "out.yaml",
+					Template: "key: value",
+				},
+			},
+		},
+	}
+	if err := p.Validate(); err != nil {
+		t.Fatalf("expected valid pipeline, got error: %v", err)
+	}
+}
+
+func TestValidate_MissingGenerateConfig(t *testing.T) {
+	p := &Pipeline{
+		Pipeline: []StepConfig{
+			{Name: "a", Type: StepTypeGenerate},
+		},
+	}
+	err := p.Validate()
+	if err == nil {
+		t.Fatal("expected error for missing generate config")
+	}
+	if !strings.Contains(err.Error(), "generate config is required") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestValidate_GenerateMissingOutput(t *testing.T) {
+	p := &Pipeline{
+		Pipeline: []StepConfig{
+			{Name: "a", Type: StepTypeGenerate, Generate: &GenerateConfig{Template: "x"}},
+		},
+	}
+	err := p.Validate()
+	if err == nil {
+		t.Fatal("expected error for missing generate output")
+	}
+	if !strings.Contains(err.Error(), "generate.output is required") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestValidate_GenerateMissingTemplate(t *testing.T) {
+	p := &Pipeline{
+		Pipeline: []StepConfig{
+			{Name: "a", Type: StepTypeGenerate, Generate: &GenerateConfig{Output: "out.yaml"}},
+		},
+	}
+	err := p.Validate()
+	if err == nil {
+		t.Fatal("expected error for missing generate template")
+	}
+	if !strings.Contains(err.Error(), "generate.template is required") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestValidate_HelmValidFull(t *testing.T) {
 	p := &Pipeline{
 		Pipeline: []StepConfig{

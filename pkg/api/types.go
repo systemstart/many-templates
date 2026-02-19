@@ -77,3 +77,17 @@ type SplitConfig struct {
 	FileNameTemplate  string `yaml:"fileNameTemplate"`
 	CanonicalKeyOrder *bool  `yaml:"canonicalKeyOrder,omitempty"` // default true
 }
+
+// InstancesConfig is the top-level instances file format.
+type InstancesConfig struct {
+	Instances []Instance `yaml:"instances"`
+}
+
+// Instance defines a single instance in instances mode.
+type Instance struct {
+	Name    string         `yaml:"name"`
+	Input   string         `yaml:"input"`
+	Output  string         `yaml:"output"`
+	Include []string       `yaml:"include"`
+	Context map[string]any `yaml:"context"`
+}

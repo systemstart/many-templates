@@ -520,6 +520,206 @@ func TestRunSingle_NonexistentPipelineFile(t *testing.T) {
 	}
 }
 
+func setupFilteredTree(t *testing.T) string {
+	t.Helper()
+	src := t.TempDir()
+	writeTestFile(t, filepath.Join(src, "root.txt"), "root")
+	for _, name := range []string{"app1", "app2", "app3"} {
+		dir := filepath.Join(src, name)
+		mkdirAll(t, dir)
+		writeTestFile(t, filepath.Join(dir, "data.txt"), name)
+	}
+	return src
+}
+
+func writeTestFile(t *testing.T, path, content string) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func mkdirAll(t *testing.T, path string) {
+	t.Helper()
+	if err := os.MkdirAll(path, 0o750); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func assertFileContent(t *testing.T, path, expected string) {
+	t.Helper()
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("expected file %s to exist: %v", path, err)
+	}
+	if string(content) != expected {
+		t.Errorf("expected %q, got %q in %s", expected, string(content), path)
+	}
+}
+
+func assertNotExists(t *testing.T, path string) {
+	t.Helper()
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Errorf("expected %s to not exist", path)
+	}
+}
+
+func TestCopyTreeFiltered(t *testing.T) {
+	src := setupFilteredTree(t)
+	dst := filepath.Join(t.TempDir(), "output")
+
+	if err := copyTreeFiltered(src, dst, []string{"app1", "app3"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	assertFileContent(t, filepath.Join(dst, "root.txt"), "root")
+	assertFileContent(t, filepath.Join(dst, "app1", "data.txt"), "app1")
+	assertFileContent(t, filepath.Join(dst, "app3", "data.txt"), "app3")
+	assertNotExists(t, filepath.Join(dst, "app2"))
+}
+
+func TestCopyTreeFiltered_EmptyInclude(t *testing.T) {
+	src := t.TempDir()
+
+	if err := os.WriteFile(filepath.Join(src, "root.txt"), []byte("root"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(src, "sub"), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(src, "sub", "file.txt"), []byte("sub"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	dst := filepath.Join(t.TempDir(), "output")
+
+	// Empty include = copy everything
+	if err := copyTreeFiltered(src, dst, nil); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(dst, "root.txt")); err != nil {
+		t.Error("root.txt should exist")
+	}
+	if _, err := os.Stat(filepath.Join(dst, "sub", "file.txt")); err != nil {
+		t.Error("sub/file.txt should exist")
+	}
+}
+
+func setupInstancesSource(t *testing.T) string {
+	t.Helper()
+	src := t.TempDir()
+	appDir := filepath.Join(src, "app")
+	mkdirAll(t, appDir)
+	writeTestFile(t, filepath.Join(appDir, ".many.yaml"), `
+pipeline:
+  - name: render
+    type: template
+    template:
+      files:
+        include: ["*.txt"]
+`)
+	writeTestFile(t, filepath.Join(appDir, "greeting.txt"), "Hello {{ .name }}!")
+	return src
+}
+
+func TestRunInstances_Integration(t *testing.T) {
+	src := setupInstancesSource(t)
+	dst := filepath.Join(t.TempDir(), "output")
+
+	cfg := &api.InstancesConfig{
+		Instances: []api.Instance{
+			{Name: "alpha", Output: "alpha", Context: map[string]any{"name": "Alpha"}},
+			{Name: "beta", Output: "beta", Context: map[string]any{"name": "Beta"}},
+		},
+	}
+
+	if err := RunInstances(cfg, src, dst, nil, -1, ""); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	assertFileContent(t, filepath.Join(dst, "alpha", "app", "greeting.txt"), "Hello Alpha!")
+	assertFileContent(t, filepath.Join(dst, "beta", "app", "greeting.txt"), "Hello Beta!")
+	assertNotExists(t, filepath.Join(dst, "alpha", "app", ".many.yaml"))
+	assertNotExists(t, filepath.Join(dst, "beta", "app", ".many.yaml"))
+}
+
+func setupMultiAppSource(t *testing.T, apps []string) string {
+	t.Helper()
+	src := t.TempDir()
+	pipelineYAML := `
+pipeline:
+  - name: render
+    type: template
+    template:
+      files:
+        include: ["*.txt"]
+`
+	for _, name := range apps {
+		dir := filepath.Join(src, name)
+		mkdirAll(t, dir)
+		writeTestFile(t, filepath.Join(dir, ".many.yaml"), pipelineYAML)
+		writeTestFile(t, filepath.Join(dir, "data.txt"), "{{ .v }}")
+	}
+	return src
+}
+
+func TestRunInstances_IncludeFilter(t *testing.T) {
+	src := setupMultiAppSource(t, []string{"app1", "app2"})
+	dst := filepath.Join(t.TempDir(), "output")
+
+	cfg := &api.InstancesConfig{
+		Instances: []api.Instance{
+			{Name: "filtered", Output: "out", Include: []string{"app1"}, Context: map[string]any{"v": "ok"}},
+		},
+	}
+
+	if err := RunInstances(cfg, src, dst, nil, -1, ""); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	assertFileContent(t, filepath.Join(dst, "out", "app1", "data.txt"), "ok")
+	assertNotExists(t, filepath.Join(dst, "out", "app2"))
+}
+
+func TestRunInstances_FailedInstance(t *testing.T) {
+	src := t.TempDir()
+	dst := filepath.Join(t.TempDir(), "output")
+	pipelineYAML := `
+pipeline:
+  - name: render
+    type: template
+    template:
+      files:
+        include: ["*.txt"]
+`
+	// good and bad apps
+	for _, name := range []string{"good", "bad"} {
+		dir := filepath.Join(src, name)
+		mkdirAll(t, dir)
+		writeTestFile(t, filepath.Join(dir, ".many.yaml"), pipelineYAML)
+	}
+	writeTestFile(t, filepath.Join(src, "good", "file.txt"), "{{ .v }}")
+	writeTestFile(t, filepath.Join(src, "bad", "file.txt"), "{{ .missing | fail }}")
+
+	cfg := &api.InstancesConfig{
+		Instances: []api.Instance{
+			{Name: "bad-inst", Output: "bad-out", Include: []string{"bad"}},
+			{Name: "good-inst", Output: "good-out", Include: []string{"good"}, Context: map[string]any{"v": "works"}},
+		},
+	}
+
+	err := RunInstances(cfg, src, dst, nil, -1, "")
+	if err == nil {
+		t.Fatal("expected error for failed instance")
+	}
+	if !strings.Contains(err.Error(), "instance(s) failed") {
+		t.Errorf("unexpected error: %v", err)
+	}
+
+	assertFileContent(t, filepath.Join(dst, "good-out", "good", "file.txt"), "works")
+}
+
 func TestRunAll_FailedPipeline(t *testing.T) {
 	src := t.TempDir()
 	dst := filepath.Join(t.TempDir(), "output")

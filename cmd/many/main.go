@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"runtime/debug"
 
 	"github.com/joho/godotenv"
+	"github.com/systemstart/many-templates/pkg/api"
 	"github.com/systemstart/many-templates/pkg/logging"
 	"github.com/systemstart/many-templates/pkg/processing"
 )
@@ -33,10 +35,14 @@ const (
 	exitOutputDirectoryCleanFailed
 	exitOutputDirectoryCreateFailed
 	exitLoadContextFailed
+	exitLoadInstancesFailed
+	exitInstanceInputNotADirectory
+	exitInstancesIncompatibleFlags
 )
 
 var (
 	processingFile           string
+	instancesFile            string
 	inputDirectory           string
 	outputDirectory          string
 	overwriteOutputDirectory bool
@@ -53,6 +59,11 @@ func init() {
 		"processing",
 		"",
 		"single .many.yaml to run (non-recursive mode)")
+	flag.StringVar(
+		&instancesFile,
+		"instances",
+		"",
+		"instances YAML file for matrix mode")
 	flag.StringVar(
 		&inputDirectory,
 		"input-directory",
@@ -109,15 +120,48 @@ func main() {
 	checkInputDirectory()
 	ensureOutputDirectory()
 
+	if instancesFile != "" && processingFile != "" {
+		slog.Error("-instances and -processing are mutually exclusive")
+		os.Exit(exitInstancesIncompatibleFlags)
+	}
+
 	globalContext := loadGlobalContext()
 
-	if processingFile != "" {
+	if instancesFile != "" {
+		runInstancesMode(globalContext)
+	} else if processingFile != "" {
 		runSinglePipeline(globalContext)
 	} else {
 		runDiscoveryMode(globalContext)
 	}
 
 	slog.Info("done")
+}
+
+func runInstancesMode(globalContext map[string]any) {
+	cfg, err := api.LoadInstances(instancesFile)
+	if err != nil {
+		slog.Error("failed to load instances file", "filename", instancesFile, "error", err)
+		os.Exit(exitLoadInstancesFailed)
+	}
+
+	// Validate instance input directories exist.
+	for _, inst := range cfg.Instances {
+		instInputDir := inputDirectory
+		if inst.Input != "" {
+			instInputDir = filepath.Join(inputDirectory, inst.Input)
+		}
+		st, err := os.Stat(instInputDir)
+		if err != nil || !st.IsDir() {
+			slog.Error("instance input is not a directory", "instance", inst.Name, "path", instInputDir)
+			os.Exit(exitInstanceInputNotADirectory)
+		}
+	}
+
+	if err := processing.RunInstances(cfg, inputDirectory, outputDirectory, globalContext, maxDepth, contextFile); err != nil {
+		slog.Error("instances processing failed", "error", err)
+		os.Exit(exitToolErrors)
+	}
 }
 
 func runSinglePipeline(globalContext map[string]any) {
