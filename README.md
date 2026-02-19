@@ -335,6 +335,26 @@ pipeline:
         include: [ "**/*.yaml" ]
 ```
 
+### Context Value Interpolation
+
+After merging global and pipeline-local context, all string values in the context map are rendered as Go templates
+against the full context. This lets context values reference other context values:
+
+```yaml
+# global.yaml
+domain: "example.com"
+forgejo_url: "https://forgejo.{{ .domain }}"
+app_url: "https://app.{{ .domain }}"
+```
+
+After interpolation, `forgejo_url` becomes `https://forgejo.example.com` and `app_url` becomes
+`https://app.example.com`. The same [Sprig](https://masterminds.github.io/sprig/) functions available in template steps
+can be used in context values (e.g. `{{ .name | upper }}`).
+
+Interpolation is a **single pass** --- values can reference plain context keys but not other interpolated values.
+Strings inside nested maps and slices are also interpolated. Non-string values (ints, bools) are left unchanged. If a
+context value fails to parse or execute as a template, the pipeline aborts with an error.
+
 ## Execution Model
 
 1. The entire source tree is copied to the output directory.

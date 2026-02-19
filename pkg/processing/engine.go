@@ -14,43 +14,52 @@ import (
 // RunPipeline executes a single pipeline's steps sequentially.
 func RunPipeline(pipeline *api.Pipeline, globalContext map[string]any) error {
 	ctx := MergeContext(globalContext, pipeline.Context)
+	if err := InterpolateContext(ctx); err != nil {
+		return fmt.Errorf("interpolating context: %w", err)
+	}
 
 	outputs := make(map[string][]byte)
 
 	for _, stepCfg := range pipeline.Pipeline {
-		step, err := steps.NewStep(stepCfg)
-		if err != nil {
-			return fmt.Errorf("creating step %q: %w", stepCfg.Name, err)
-		}
-
-		sctx := steps.StepContext{
-			WorkDir:      pipeline.Dir,
-			TemplateData: ctx,
-		}
-
-		if stepCfg.Type == api.StepTypeSplit && stepCfg.Split != nil {
-			input, ok := outputs[stepCfg.Split.Input]
-			if !ok {
-				return fmt.Errorf("step %q: input %q not found in step outputs", stepCfg.Name, stepCfg.Split.Input)
-			}
-			sctx.InputData = input
-		}
-
 		slog.Info("running step", "pipeline", pipeline.FilePath, "step", stepCfg.Name, "type", stepCfg.Type)
-
-		result, err := step.Run(sctx)
-		if err != nil {
-			return fmt.Errorf("step %q failed: %w", stepCfg.Name, err)
-		}
-
-		if result != nil && len(result.Output) > 0 {
-			outputs[stepCfg.Name] = result.Output
-		}
-		if result != nil {
-			removeBuildArtifacts(pipeline.Dir, result.Cleanup)
+		if err := runStep(stepCfg, pipeline, ctx, outputs); err != nil {
+			return err
 		}
 	}
 
+	return nil
+}
+
+func runStep(stepCfg api.StepConfig, pipeline *api.Pipeline, ctx map[string]any, outputs map[string][]byte) error {
+	step, err := steps.NewStep(stepCfg)
+	if err != nil {
+		return fmt.Errorf("creating step %q: %w", stepCfg.Name, err)
+	}
+
+	sctx := steps.StepContext{
+		WorkDir:      pipeline.Dir,
+		TemplateData: ctx,
+	}
+
+	if stepCfg.Type == api.StepTypeSplit && stepCfg.Split != nil {
+		input, ok := outputs[stepCfg.Split.Input]
+		if !ok {
+			return fmt.Errorf("step %q: input %q not found in step outputs", stepCfg.Name, stepCfg.Split.Input)
+		}
+		sctx.InputData = input
+	}
+
+	result, err := step.Run(sctx)
+	if err != nil {
+		return fmt.Errorf("step %q failed: %w", stepCfg.Name, err)
+	}
+
+	if result != nil && len(result.Output) > 0 {
+		outputs[stepCfg.Name] = result.Output
+	}
+	if result != nil {
+		removeBuildArtifacts(pipeline.Dir, result.Cleanup)
+	}
 	return nil
 }
 

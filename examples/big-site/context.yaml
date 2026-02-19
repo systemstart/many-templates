@@ -56,16 +56,16 @@ lldap:
 
 # MinIO S3 (used by fediverse services)
 minio:
-  endpoint: "https://s3.example.com"
+  endpoint: "https://{{ .subdomains.minio }}.{{ .domain }}"
   region: "sprawl-west-1"
   buckets:
     mastodon: "mastodon-media"
 
 # SMTP (shared by all services)
 smtp:
-  host: "smtp.example.com"
+  host: "{{ .subdomains.stalwart }}.{{ .domain }}"
   port: "587"
-  from: "noreply@example.com"
+  from: "noreply@{{ .domain }}"
   username: "smtp-user"
 
 # Argo CD application management
