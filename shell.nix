@@ -19,6 +19,7 @@ pkgs.mkShell {
   buildInputs = with pkgs; [
     goPkg
     golangci-lint
+    goreleaser
     kustomize
     kubernetes-helm
   ];

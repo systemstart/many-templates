@@ -1,7 +1,7 @@
 COVERAGE_THRESHOLD := 80
 COVERPROFILE := coverage.out
 
-.PHONY: build test check clean
+.PHONY: build test check release clean
 
 build:
 	CGO_ENABLED=1 go build -o many ./cmd/many
@@ -18,6 +18,9 @@ test:
 
 check:
 	golangci-lint run
+
+release:
+	goreleaser release --clean
 
 clean:
 	rm -f $(COVERPROFILE)
