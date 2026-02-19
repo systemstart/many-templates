@@ -23,10 +23,10 @@ mastodon:
       vapidPublicKey: vapid-public-key
 
   s3:
-    hostname: {{ .subdomains.minio }}.{{ .domain }}
-    endpoint: {{ .minio.endpoint }}
-    bucket: {{ .minio.buckets.mastodon }}
-    region: {{ .minio.region }}
+    hostname: {{ .s3.hostname }}
+    endpoint: {{ .s3.endpoint }}
+    bucket: {{ .s3.buckets.mastodon }}
+    region: {{ .s3.region }}
     existingSecret: mastodon-secrets
     existingSecretKeys:
       accessKeyId: s3-access-key

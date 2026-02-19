@@ -462,16 +462,15 @@ the exit code is non-zero if any pipeline failed.
 a working setup is not scope of this example.**
 
 The [`examples/many-sites/`](examples/many-sites/) directory demonstrates instances mode with a real-world deployment
-configuration. A shared set of service templates is rendered for two domains --- `example.com` and `other-example.com`
---- each selecting a different subset of services:
+configuration. A shared set of service templates is rendered for two domains --- `fediverse.example` and
+`development.example` --- each selecting a different subset of services:
 
-- **example.com** --- Fediverse stack: Mastodon, Matrix/Element, Mobilizon, Pixelfed, MinIO
-- **other-example.com** --- Office and development stack: ownCloud OCIS, Paperless-ngx, Stalwart mail, Forgejo,
-  Woodpecker CI, Harbor
+- **fediverse.example** --- Mastodon, Matrix/Element, Mobilizon, Pixelfed
+- **development.example** --- Forgejo, Woodpecker CI, Harbor
 
-Both instances share infrastructure services (Dex, LLDAP, ESO, Argo CD), a global context file for common
-configuration, and per-instance context for the domain name. The `instances.yaml` file defines the two instances with
-their `include` filters and context overrides.
+Both instances share infrastructure services (Dex, LLDAP, ESO), a global context file for common
+configuration, and per-instance context for the domain name. External S3 and SMTP are configured globally.
+The `instances.yaml` file defines the two instances with their `include` filters and context overrides.
 
 ```bash
 many \

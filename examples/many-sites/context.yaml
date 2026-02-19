@@ -6,21 +6,15 @@ subdomains:
   dex: "auth"
   lldap: "ldap"
   # Fediverse
-  minio: "s3"
   mastodon: "social"
   matrix: "matrix"
   element: "chat"
   mobilizon: "events"
   pixelfed: "photos"
-  # Office
-  ocis: "cloud"
-  paperless: "docs"
-  stalwart: "mail"
-  # SDP
+  # Development
   forgejo: "git"
   woodpecker: "ci"
   harbor: "registry"
-  argocd: "cd"
 
 # Kubernetes infrastructure
 storageClass: "default"
@@ -31,16 +25,11 @@ certIssuer: "letsencrypt-prod"
 storage:
   # Infrastructure
   lldap: "1Gi"
-  minio: "50Gi"
   # Fediverse
   matrix: "10Gi"
   mobilizon: "20Gi"
   pixelfed: "50Gi"
-  # Office
-  ocis: "100Gi"
-  paperless: "20Gi"
-  stalwart: "50Gi"
-  # SDP
+  # Development
   forgejo: "50Gi"
   woodpecker: "5Gi"
   harbor:
@@ -54,29 +43,23 @@ storage:
 lldap:
   adminUsername: "admin"
 
-# MinIO S3 (used by fediverse services)
-minio:
-  endpoint: "https://{{ .subdomains.minio }}.{{ .domain }}"
-  region: "sprawl-west-1"
+# External S3 (used by fediverse services)
+s3:
+  hostname: "s3.example"
+  endpoint: "https://s3.example"
+  region: "us-east-1"
   buckets:
     mastodon: "mastodon-media"
 
-# SMTP (shared by all services)
+# External SMTP (shared by all services)
 smtp:
-  host: "{{ .subdomains.stalwart }}.{{ .domain }}"
+  host: "smtp.example"
   port: "587"
   from: "noreply@{{ .domain }}"
   username: "smtp-user"
 
-# Argo CD application management
-argocd:
-  repoURL: "https://github.com/example/many-sites.git"
-  targetRevision: "main"
-  basePath: "deploy"
-
 # Dex OIDC client IDs
 oidc:
-  # Fediverse
   mastodon:
     clientId: "mastodon"
   matrix:
@@ -85,20 +68,10 @@ oidc:
     clientId: "mobilizon"
   pixelfed:
     clientId: "pixelfed"
-  # Office
-  ocis:
-    clientId: "ocis"
-  paperless:
-    clientId: "paperless"
-  stalwart:
-    clientId: "stalwart"
-  # SDP
   forgejo:
     clientId: "forgejo"
   harbor:
     clientId: "harbor"
-  argocd:
-    clientId: "argocd"
 
 # Dex OIDC client catalog — each entry defines a service's OIDC integration.
 # The dex values.yaml iterates this list, filtered by the instance's "services" list,
@@ -116,24 +89,12 @@ oidcClients:
   - service: pixelfed
     name: Pixelfed
     callbackPath: /auth/oidc/callback
-  - service: ocis
-    name: ownCloud OCIS
-    callbackPath: /
-  - service: paperless
-    name: Paperless-ngx
-    callbackPath: /accounts/oidc/callback
-  - service: stalwart
-    name: Stalwart Mail
-    callbackPath: /auth/oauth
   - service: forgejo
     name: Forgejo
     callbackPath: /user/oauth2/dex/callback
   - service: harbor
     name: Harbor
     callbackPath: /c/oidc/callback
-  - service: argocd
-    name: Argo CD
-    callbackPath: /auth/callback
 
 # Woodpecker authenticates via Forgejo OAuth2 (not Dex directly)
 woodpecker:
