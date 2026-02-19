@@ -45,6 +45,14 @@ func TestNewStep(t *testing.T) {
 			},
 		},
 		{
+			name: "generate step",
+			cfg: api.StepConfig{
+				Name:     "gen",
+				Type:     api.StepTypeGenerate,
+				Generate: &api.GenerateConfig{Output: "out.yaml", Template: "v: ok"},
+			},
+		},
+		{
 			name: "unknown type",
 			cfg: api.StepConfig{
 				Name: "bad",

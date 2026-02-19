@@ -20,7 +20,7 @@
 
 Many Templates recursively discovers `.many.yaml` pipeline definitions in a directory tree, copies the source to an
 output directory, and executes each pipeline in-place. Pipelines compose steps: **Go templating** (with Sprig),
-**Kustomize** builds, **Helm** renders, and **YAML stream splitting**.
+**Kustomize** builds, **Helm** renders, **file generation** from inline templates, and **YAML stream splitting**.
 
 ## Installation
 
@@ -214,6 +214,33 @@ Runs `helm template` to render a chart. Requires `helm` on `PATH`.
 | `namespace`   | Target namespace                           | `"default"` |
 | `valuesFiles` | List of values files                       | `[]`        |
 | `set`         | Map of `--set` overrides                   | `{}`        |
+
+### `generate`
+
+Creates a file from an inline Go template rendered with [Sprig](https://masterminds.github.io/sprig/) functions against
+the pipeline context. Unlike `template` (which renders existing files in-place), `generate` synthesizes new files purely
+from context data, removing the need for placeholder files in the source tree.
+
+```yaml
+- name: gen-config
+  type: generate
+  generate:
+    output: manifests/config.yaml
+    template: |
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: {{ .app_name }}
+      data:
+        domain: {{ .domain }}
+```
+
+| Field      | Description                                       | Default  |
+|------------|---------------------------------------------------|----------|
+| `output`   | Output file path relative to the pipeline directory | required |
+| `template` | Inline Go template string                         | required |
+
+Parent directories for the output path are created automatically.
 
 ### `split`
 

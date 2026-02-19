@@ -7,6 +7,7 @@ const (
 	StepTypeKustomize = "kustomize"
 	StepTypeHelm      = "helm"
 	StepTypeSplit     = "split"
+	StepTypeGenerate  = "generate"
 
 	SplitByKind     = "kind"
 	SplitByResource = "resource"
@@ -33,6 +34,7 @@ type StepConfig struct {
 	Kustomize *KustomizeConfig `yaml:"kustomize,omitempty"`
 	Helm      *HelmConfig      `yaml:"helm,omitempty"`
 	Split     *SplitConfig     `yaml:"split,omitempty"`
+	Generate  *GenerateConfig  `yaml:"generate,omitempty"`
 }
 
 // FileFilter defines include/exclude glob patterns.
@@ -59,6 +61,12 @@ type HelmConfig struct {
 	Namespace   string            `yaml:"namespace"`
 	ValuesFiles []string          `yaml:"valuesFiles"`
 	Set         map[string]string `yaml:"set"`
+}
+
+// GenerateConfig configures the generate step.
+type GenerateConfig struct {
+	Output   string `yaml:"output"`
+	Template string `yaml:"template"`
 }
 
 // SplitConfig configures the split step.
