@@ -50,11 +50,22 @@ jobs:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
+          token: ${{ secrets.PAT }}
       - name: Install gsemver
         run: |
           curl -fsSL "https://github.com/arnaud-deprez/gsemver/releases/download/v${GSEMVER_VERSION}/gsemver_${GSEMVER_VERSION}_linux_amd64.tar.gz" \
             | tar -xz -C /usr/local/bin gsemver
+      - name: Check for non-CI changes
+        id: changes
+        run: |
+          if git diff --name-only HEAD~1 HEAD | grep -qv '^\.github/'; then
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Only .github/ changes, skipping tag"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
       - name: Bump version and tag
+        if: steps.changes.outputs.skip == 'false'
         env:
           GIT_BRANCH: main
         run: |
