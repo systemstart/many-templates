@@ -1,7 +1,8 @@
 externalURL: https://{{ .subdomains.harbor }}.{{ .domain }}
 
-harborAdminPassword: "{{ .secrets.harbor.adminPassword }}"
-secretKey: "{{ .secrets.harbor.secretKey }}"
+existingSecretAdminPassword: harbor-secrets
+existingSecretAdminPasswordKey: HARBOR_ADMIN_PASSWORD
+existingSecretSecretKey: harbor-secrets
 
 expose:
   type: ingress

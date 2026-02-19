@@ -1,0 +1,60 @@
+instances:
+  # Fediverse stack: social networking services
+  - name: example-com
+    input: ""
+    output: example-com/
+    include:
+      - apps
+      - argocd
+      - dex
+      - eso
+      - lldap
+      - minio
+      - mastodon
+      - matrix
+      - mobilizon
+      - pixelfed
+    context:
+      domain: "example.com"
+      siteName: "example-com"
+      services:
+        - argocd
+        - dex
+        - eso
+        - lldap
+        - minio
+        - mastodon
+        - matrix
+        - mobilizon
+        - pixelfed
+
+  # Office and development platform stack
+  - name: other-example-com
+    input: ""
+    output: other-example-com/
+    include:
+      - apps
+      - argocd
+      - dex
+      - eso
+      - lldap
+      - forgejo
+      - harbor
+      - woodpecker
+      - ocis
+      - paperless
+      - stalwart
+    context:
+      domain: "other-example.com"
+      siteName: "other-example-com"
+      services:
+        - argocd
+        - dex
+        - eso
+        - lldap
+        - forgejo
+        - harbor
+        - woodpecker
+        - ocis
+        - paperless
+        - stalwart

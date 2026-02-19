@@ -24,6 +24,8 @@ spec:
           envFrom:
             - configMapRef:
                 name: paperless-env
+            - secretRef:
+                name: paperless-oidc-config
           env:
             - name: PAPERLESS_SECRET_KEY
               valueFrom:

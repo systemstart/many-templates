@@ -53,6 +53,11 @@ spec:
                 secretKeyRef:
                   name: mobilizon-secrets
                   key: SMTP_PASSWORD
+            - name: OIDC_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: mobilizon-secrets
+                  key: OIDC_CLIENT_SECRET
           volumeMounts:
             - name: config
               mountPath: /etc/mobilizon/config.exs

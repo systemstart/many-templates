@@ -30,7 +30,7 @@ data:
 
     config :ueberauth, Ueberauth.Strategy.Keycloak.OAuth,
       client_id: "{{ .oidc.mobilizon.clientId }}",
-      client_secret: "{{ .secrets.oidc.mobilizon }}",
+      client_secret: System.get_env("OIDC_CLIENT_SECRET"),
       site: "https://{{ .subdomains.dex }}.{{ .domain }}",
       authorize_url: "https://{{ .subdomains.dex }}.{{ .domain }}/auth",
       token_url: "https://{{ .subdomains.dex }}.{{ .domain }}/token",

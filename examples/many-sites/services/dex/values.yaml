@@ -1,0 +1,66 @@
+{{- $baseDN := printf "dc=%s" (join ",dc=" (splitList "." .domain)) -}}
+config:
+  issuer: https://{{ .subdomains.dex }}.{{ .domain }}
+
+  storage:
+    type: kubernetes
+    config:
+      inCluster: true
+
+  web:
+    http: 0.0.0.0:5556
+
+  connectors:
+    - type: ldap
+      id: lldap
+      name: LLDAP
+      config:
+        host: lldap.lldap.svc.cluster.local:3890
+        insecureNoSSL: true
+        insecureSkipVerify: true
+        bindDN: uid=admin,ou=people,{{ $baseDN }}
+        bindPW: "${LDAP_BIND_PASSWORD}"
+        userSearch:
+          baseDN: ou=people,{{ $baseDN }}
+          filter: "(objectClass=person)"
+          username: uid
+          idAttr: uid
+          emailAttr: mail
+          nameAttr: displayName
+        groupSearch:
+          baseDN: ou=groups,{{ $baseDN }}
+          filter: "(objectClass=groupOfUniqueNames)"
+          userMatchers:
+            - userAttr: DN
+              groupAttr: uniqueMember
+          nameAttr: cn
+
+  staticClients:
+    {{- range .oidcClients }}
+    {{- if has .service $.services }}
+    - id: {{ index $.oidc .service "clientId" }}
+      name: {{ .name }}
+      secret: "${OIDC_SECRET_{{ .service | upper }}}"
+      redirectURIs:
+        - https://{{ index $.subdomains .service }}.{{ $.domain }}{{ .callbackPath }}
+    {{- end }}
+    {{- end }}
+
+envFrom:
+  - secretRef:
+      name: dex-secrets
+
+ingress:
+  enabled: true
+  className: {{ .ingressClassName }}
+  annotations:
+    cert-manager.io/cluster-issuer: {{ .certIssuer }}
+  hosts:
+    - host: {{ .subdomains.dex }}.{{ .domain }}
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: dex-tls
+      hosts:
+        - {{ .subdomains.dex }}.{{ .domain }}

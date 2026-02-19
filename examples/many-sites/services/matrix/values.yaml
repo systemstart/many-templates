@@ -11,7 +11,8 @@ extraConfig:
       idp_name: "SSO Login"
       issuer: https://{{ .subdomains.dex }}.{{ .domain }}
       client_id: {{ .oidc.matrix.clientId }}
-      client_secret: {{ .secrets.oidc.matrix }}
+      # client_secret loaded from file via client_secret_path
+      client_secret_path: /synapse/secrets/oidc-client-secret
       scopes:
         - openid
         - profile
@@ -26,12 +27,22 @@ extraConfig:
     smtp_host: {{ .smtp.host }}
     smtp_port: {{ .smtp.port }}
     smtp_user: {{ .smtp.username }}
-    smtp_pass: {{ .secrets.smtp.password }}
     notif_from: {{ .smtp.from }}
+    # smtp_pass loaded from synapse-secrets (key: smtp-password) via volume mount
 
 signingKey:
   existingSecret: synapse-secrets
   existingSecretKey: signing.key
+
+extraVolumes:
+  - name: synapse-secrets
+    secret:
+      secretName: synapse-secrets
+
+extraVolumeMounts:
+  - name: synapse-secrets
+    mountPath: /synapse/secrets
+    readOnly: true
 
 postgresql:
   enabled: true

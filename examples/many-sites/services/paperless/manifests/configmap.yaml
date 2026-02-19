@@ -28,23 +28,8 @@ data:
 
   # OIDC via socialaccount/allauth
   PAPERLESS_APPS: "allauth.socialaccount.providers.openid_connect"
-  PAPERLESS_SOCIALACCOUNT_PROVIDERS: |
-    {
-      "openid_connect": {
-        "APPS": [
-          {
-            "provider_id": "dex",
-            "name": "SSO Login",
-            "client_id": "{{ .oidc.paperless.clientId }}",
-            "secret": "{{ .secrets.oidc.paperless }}",
-            "settings": {
-              "server_url": "https://{{ .subdomains.dex }}.{{ .domain }}"
-            }
-          }
-        ],
-        "OAUTH_PKCE_ENABLED": "True"
-      }
-    }
+  # PAPERLESS_SOCIALACCOUNT_PROVIDERS is in paperless-oidc-config Secret
+  # because it contains the OIDC client secret from ESO.
 
   # OCR
   PAPERLESS_OCR_LANGUAGE: "eng"

@@ -458,21 +458,28 @@ the exit code is non-zero if any pipeline failed.
 
 ## Examples
 
-**WARNING: this should only demonstrate the usage for a non-trivial project. Whether the resulting manifests provide 
+**WARNING: this should only demonstrate the usage for a non-trivial project. Whether the resulting manifests provide
 a working setup is not scope of this example.**
 
+The [`examples/many-sites/`](examples/many-sites/) directory demonstrates instances mode with a real-world deployment
+configuration. A shared set of service templates is rendered for two domains --- `example.com` and `other-example.com`
+--- each selecting a different subset of services:
 
-The [`examples/big-site/`](examples/big-site/) directory contains a complete, real-world deployment configuration
-combining three stacks under shared infrastructure:
+- **example.com** --- Fediverse stack: Mastodon, Matrix/Element, Mobilizon, Pixelfed, MinIO
+- **other-example.com** --- Office and development stack: ownCloud OCIS, Paperless-ngx, Stalwart mail, Forgejo,
+  Woodpecker CI, Harbor
 
-- **Infrastructure** --- Dex (OIDC), LLDAP, MinIO, ESO (External Secrets Operator), Argo CD
-- **Fediverse** --- Mastodon, Matrix/Element, Mobilizon, Pixelfed
-- **Office** --- ownCloud OCIS, Paperless-ngx, Stalwart mail
-- **SDP** --- Forgejo, Woodpecker CI, Harbor
+Both instances share infrastructure services (Dex, LLDAP, ESO, Argo CD), a global context file for common
+configuration, and per-instance context for the domain name. The `instances.yaml` file defines the two instances with
+their `include` filters and context overrides.
 
-All services share Dex/LLDAP for SSO, use ExternalSecret resources for secrets management, and are deployed via an
-ArgoCD app-of-apps pattern. The example demonstrates single-step templating for plain manifests, multi-step
-Helm+Kustomize+split pipelines, and a global context file for shared configuration.
+```bash
+many \
+  -input-directory examples/many-sites/services \
+  -output-directory output \
+  -instances examples/many-sites/instances.yaml \
+  -context-file examples/many-sites/context.yaml
+```
 
 ## Environment Variables
 

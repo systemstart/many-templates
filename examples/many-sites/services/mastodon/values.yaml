@@ -10,9 +10,10 @@ mastodon:
     port: {{ .smtp.port }}
     fromAddress: {{ .smtp.from }}
     username: {{ .smtp.username }}
-    password: {{ .secrets.smtp.password }}
     authMethod: plain
     opensslVerifyMode: peer
+    existingSecret: mastodon-secrets
+    passwordKey: smtp-password
 
   secrets:
     existingSecret: mastodon-secrets
@@ -40,7 +41,8 @@ externalAuth:
     scope: "openid,profile,email"
     uidField: sub
     clientId: {{ .oidc.mastodon.clientId }}
-    clientSecret: {{ .secrets.oidc.mastodon }}
+    existingSecret: mastodon-secrets
+    clientSecretKey: oidc-client-secret
     redirectUri: https://{{ .subdomains.mastodon }}.{{ .domain }}/auth/auth/openid_connect/callback
     assumeEmailIsVerified: true
 

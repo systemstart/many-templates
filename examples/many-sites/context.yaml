@@ -1,4 +1,4 @@
-domain: "example.com"
+# domain and siteName are set per-instance in instances.yaml
 
 # Subdomains for each service
 subdomains:
@@ -70,8 +70,7 @@ smtp:
 
 # Argo CD application management
 argocd:
-  project: "site"
-  repoURL: "https://github.com/example/big-site.git"
+  repoURL: "https://github.com/example/many-sites.git"
   targetRevision: "main"
   basePath: "deploy"
 
@@ -101,6 +100,41 @@ oidc:
   argocd:
     clientId: "argocd"
 
+# Dex OIDC client catalog — each entry defines a service's OIDC integration.
+# The dex values.yaml iterates this list, filtered by the instance's "services" list,
+# so each instance only gets clients for services it actually deploys.
+oidcClients:
+  - service: mastodon
+    name: Mastodon
+    callbackPath: /auth/auth/openid_connect/callback
+  - service: matrix
+    name: Matrix Synapse
+    callbackPath: /_synapse/client/oidc/callback
+  - service: mobilizon
+    name: Mobilizon
+    callbackPath: /auth/keycloak/callback
+  - service: pixelfed
+    name: Pixelfed
+    callbackPath: /auth/oidc/callback
+  - service: ocis
+    name: ownCloud OCIS
+    callbackPath: /
+  - service: paperless
+    name: Paperless-ngx
+    callbackPath: /accounts/oidc/callback
+  - service: stalwart
+    name: Stalwart Mail
+    callbackPath: /auth/oauth
+  - service: forgejo
+    name: Forgejo
+    callbackPath: /user/oauth2/dex/callback
+  - service: harbor
+    name: Harbor
+    callbackPath: /c/oidc/callback
+  - service: argocd
+    name: Argo CD
+    callbackPath: /auth/callback
+
 # Woodpecker authenticates via Forgejo OAuth2 (not Dex directly)
 woodpecker:
   forgejoClientId: "woodpecker-ci"
@@ -108,4 +142,4 @@ woodpecker:
 # External Secrets Operator
 eso:
   secretStoreName: "cluster-secret-store"
-  remotePathPrefix: "site"
+  remotePathPrefix: "site/{{ .siteName }}"
