@@ -1,6 +1,6 @@
 module github.com/systemstart/many-templates
 
-go 1.25.6
+go 1.26.1
 
 require (
 	github.com/Masterminds/sprig/v3 v3.3.0
