@@ -32,6 +32,17 @@
       "depNameTemplate": "arnaud-deprez/gsemver",
       "datasourceTemplate": "github-releases",
       "extractVersionTemplate": "^v(?<version>.*)$"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "go.mod"
+      ],
+      "matchStrings": [
+        "\\ngo (?<currentValue>[^\\s]+)\\n"
+      ],
+      "depNameTemplate": "go",
+      "datasourceTemplate": "golang-version"
     }
   ]
 }
