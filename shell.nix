@@ -18,7 +18,7 @@ pkgs.mkShell {
 
   buildInputs = with pkgs; [
     goPkg
-    (golangci-lint.override { buildGoModule = buildGoModule.override { go = goPkg; }; })
+    (golangci-lint.override { buildGo125Module = buildGo125Module.override { go = goPkg; }; })
     goreleaser
     kustomize
     kubernetes-helm
