@@ -1,7 +1,7 @@
 COVERAGE_THRESHOLD := 80
 COVERPROFILE := coverage.out
 
-.PHONY: build test check release clean
+.PHONY: build test check tag release clean
 
 build:
 	CGO_ENABLED=1 go build -o many ./cmd/many
@@ -19,7 +19,12 @@ test:
 check:
 	golangci-lint run
 
-release:
+tag:
+	$(eval VERSION ?= $(shell gsemver bump))
+	git tag -a "v$(VERSION)" -m "Release v$(VERSION)"
+	git push origin "v$(VERSION)"
+
+release: check test build
 	goreleaser release --clean
 
 clean:
