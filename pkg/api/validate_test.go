@@ -279,6 +279,142 @@ func TestValidate_GenerateMissingTemplate(t *testing.T) {
 	}
 }
 
+func TestValidate_SourceNoScheme(t *testing.T) {
+	p := &Pipeline{
+		Source: Sources{{Path: "somewhere/"}},
+		Pipeline: []StepConfig{
+			{Name: "a", Type: StepTypeTemplate, Template: &TemplateConfig{}},
+		},
+	}
+	err := p.Validate()
+	if err == nil {
+		t.Fatal("expected error for source with no scheme")
+	}
+	if !strings.Contains(err.Error(), "exactly one of oci, https, file, or ocm must be set") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestValidate_SourceMultipleSchemes(t *testing.T) {
+	p := &Pipeline{
+		Source: Sources{{OCI: "x", HTTPS: "y"}},
+		Pipeline: []StepConfig{
+			{Name: "a", Type: StepTypeTemplate, Template: &TemplateConfig{}},
+		},
+	}
+	err := p.Validate()
+	if err == nil {
+		t.Fatal("expected error for source with multiple schemes")
+	}
+	if !strings.Contains(err.Error(), "exactly one of oci, https, file, or ocm must be set") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestValidate_SourcePathTraversal(t *testing.T) {
+	p := &Pipeline{
+		Source: Sources{{OCI: "ghcr.io/myorg/image:v1", Path: "../escape"}},
+		Pipeline: []StepConfig{
+			{Name: "a", Type: StepTypeTemplate, Template: &TemplateConfig{}},
+		},
+	}
+	err := p.Validate()
+	if err == nil {
+		t.Fatal("expected error for path traversal")
+	}
+	if !strings.Contains(err.Error(), "must not traverse") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestValidate_SourceAbsolutePath(t *testing.T) {
+	p := &Pipeline{
+		Source: Sources{{OCI: "ghcr.io/myorg/image:v1", Path: "/absolute/path"}},
+		Pipeline: []StepConfig{
+			{Name: "a", Type: StepTypeTemplate, Template: &TemplateConfig{}},
+		},
+	}
+	err := p.Validate()
+	if err == nil {
+		t.Fatal("expected error for absolute path")
+	}
+	if !strings.Contains(err.Error(), "path must be relative") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestValidate_SourceValid(t *testing.T) {
+	p := &Pipeline{
+		Source: Sources{{OCI: "ghcr.io/myorg/image:v1", Path: "subdir/"}},
+		Pipeline: []StepConfig{
+			{Name: "a", Type: StepTypeTemplate, Template: &TemplateConfig{}},
+		},
+	}
+	if err := p.Validate(); err != nil {
+		t.Fatalf("expected valid pipeline, got error: %v", err)
+	}
+}
+
+func TestValidate_SourceOCMValid(t *testing.T) {
+	p := &Pipeline{
+		Source: Sources{{OCM: "ghcr.io/myorg/ocm//comp:v1"}},
+		Pipeline: []StepConfig{
+			{Name: "a", Type: StepTypeTemplate, Template: &TemplateConfig{}},
+		},
+	}
+	if err := p.Validate(); err != nil {
+		t.Fatalf("expected valid pipeline, got error: %v", err)
+	}
+}
+
+func TestValidate_SourceRecursiveWithoutOCM(t *testing.T) {
+	p := &Pipeline{
+		Source: Sources{{OCI: "ghcr.io/myorg/image:v1", Recursive: true}},
+		Pipeline: []StepConfig{
+			{Name: "a", Type: StepTypeTemplate, Template: &TemplateConfig{}},
+		},
+	}
+	err := p.Validate()
+	if err == nil {
+		t.Fatal("expected error for recursive without ocm")
+	}
+	if !strings.Contains(err.Error(), "recursive is only valid when ocm is set") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestValidate_SourceRecursiveWithOCM(t *testing.T) {
+	p := &Pipeline{
+		Source: Sources{{OCM: "ghcr.io/myorg/ocm//comp:v1", Recursive: true}},
+		Pipeline: []StepConfig{
+			{Name: "a", Type: StepTypeTemplate, Template: &TemplateConfig{}},
+		},
+	}
+	if err := p.Validate(); err != nil {
+		t.Fatalf("expected valid pipeline, got error: %v", err)
+	}
+}
+
+func TestValidate_StepSourceInvalid(t *testing.T) {
+	p := &Pipeline{
+		Pipeline: []StepConfig{
+			{
+				Name:     "a",
+				Type:     StepTypeTemplate,
+				Template: &TemplateConfig{},
+				Source:   Sources{{Path: "only-path"}},
+			},
+		},
+	}
+	err := p.Validate()
+	if err == nil {
+		t.Fatal("expected error for step source with no scheme")
+	}
+	if !strings.Contains(err.Error(), "exactly one of oci, https, file, or ocm must be set") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestValidate_HelmValidFull(t *testing.T) {
 	p := &Pipeline{
 		Pipeline: []StepConfig{

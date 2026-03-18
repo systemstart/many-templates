@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	"github.com/systemstart/many-templates/pkg/api"
+	"github.com/systemstart/many-templates/pkg/resolve"
 	"github.com/systemstart/many-templates/pkg/steps"
 )
 
@@ -16,6 +17,16 @@ func RunPipeline(pipeline *api.Pipeline, globalContext map[string]any) error {
 	ctx := MergeContext(globalContext, pipeline.Context)
 	if err := InterpolateContext(ctx); err != nil {
 		return fmt.Errorf("interpolating context: %w", err)
+	}
+
+	if len(pipeline.Source) > 0 {
+		cleanup, err := resolveSources(pipeline.Source, pipeline.Dir)
+		if err != nil {
+			return fmt.Errorf("resolving pipeline sources: %w", err)
+		}
+		if cleanup != nil {
+			defer cleanup()
+		}
 	}
 
 	outputs := make(map[string][]byte)
@@ -31,22 +42,22 @@ func RunPipeline(pipeline *api.Pipeline, globalContext map[string]any) error {
 }
 
 func runStep(stepCfg api.StepConfig, pipeline *api.Pipeline, ctx map[string]any, outputs map[string][]byte) error {
+	cleanup, err := resolveStepSources(stepCfg, pipeline.Dir)
+	if err != nil {
+		return err
+	}
+	if cleanup != nil {
+		defer cleanup()
+	}
+
 	step, err := steps.NewStep(stepCfg)
 	if err != nil {
 		return fmt.Errorf("creating step %q: %w", stepCfg.Name, err)
 	}
 
-	sctx := steps.StepContext{
-		WorkDir:      pipeline.Dir,
-		TemplateData: ctx,
-	}
-
-	if stepCfg.Type == api.StepTypeSplit && stepCfg.Split != nil {
-		input, ok := outputs[stepCfg.Split.Input]
-		if !ok {
-			return fmt.Errorf("step %q: input %q not found in step outputs", stepCfg.Name, stepCfg.Split.Input)
-		}
-		sctx.InputData = input
+	sctx, err := buildStepContext(stepCfg, pipeline.Dir, ctx, outputs)
+	if err != nil {
+		return err
 	}
 
 	result, err := step.Run(sctx)
@@ -61,6 +72,32 @@ func runStep(stepCfg api.StepConfig, pipeline *api.Pipeline, ctx map[string]any,
 		removeBuildArtifacts(pipeline.Dir, result.Cleanup)
 	}
 	return nil
+}
+
+func resolveStepSources(stepCfg api.StepConfig, dir string) (func(), error) {
+	if len(stepCfg.Source) == 0 {
+		return nil, nil
+	}
+	cleanup, err := resolveSources(stepCfg.Source, dir)
+	if err != nil {
+		return nil, fmt.Errorf("step %q: resolving sources: %w", stepCfg.Name, err)
+	}
+	return cleanup, nil
+}
+
+func buildStepContext(stepCfg api.StepConfig, workDir string, ctx map[string]any, outputs map[string][]byte) (steps.StepContext, error) {
+	sctx := steps.StepContext{
+		WorkDir:      workDir,
+		TemplateData: ctx,
+	}
+	if stepCfg.Type == api.StepTypeSplit && stepCfg.Split != nil {
+		input, ok := outputs[stepCfg.Split.Input]
+		if !ok {
+			return sctx, fmt.Errorf("step %q: input %q not found in step outputs", stepCfg.Name, stepCfg.Split.Input)
+		}
+		sctx.InputData = input
+	}
+	return sctx, nil
 }
 
 func removeBuildArtifacts(dir string, relativePaths []string) {
@@ -169,9 +206,12 @@ func RunInstances(cfg *api.InstancesConfig, inputDir, outputDir string, globalCo
 }
 
 func runInstance(inst api.Instance, inputDir, outputDir string, globalContext map[string]any, maxDepth int, contextFile string) error {
-	instInputDir := inputDir
-	if inst.Input != "" {
-		instInputDir = filepath.Join(inputDir, inst.Input)
+	instInputDir, cleanup, err := resolveInstanceInput(inst.Input, inputDir)
+	if err != nil {
+		return err
+	}
+	if cleanup != nil {
+		defer cleanup()
 	}
 	instOutputDir := filepath.Join(outputDir, inst.Output)
 	instContext := MergeContext(globalContext, inst.Context)
@@ -210,6 +250,21 @@ func runInstance(inst api.Instance, inputDir, outputDir string, globalContext ma
 		return fmt.Errorf("one or more pipelines failed")
 	}
 	return nil
+}
+
+// resolveInstanceInput determines the effective input directory for an instance.
+func resolveInstanceInput(input, inputDir string) (string, func(), error) {
+	if input == "" {
+		return inputDir, nil, nil
+	}
+	if resolve.IsRemote(input) {
+		resolved, cleanup, err := resolve.Resolve(input)
+		if err != nil {
+			return "", nil, fmt.Errorf("resolving remote input %q: %w", input, err)
+		}
+		return resolved, cleanup, nil
+	}
+	return filepath.Join(inputDir, input), nil, nil
 }
 
 func copyTreeFiltered(src, dst string, include []string) error {
@@ -321,6 +376,95 @@ func relativeToInput(file, inputDir string) (string, bool) {
 		return "", false
 	}
 	return rel, true
+}
+
+// resolveSources fetches all source entries and overlays them into targetDir.
+func resolveSources(sources api.Sources, targetDir string) (cleanup func(), err error) {
+	var cleanups []func()
+	runCleanups := func() {
+		for i := len(cleanups) - 1; i >= 0; i-- {
+			cleanups[i]()
+		}
+	}
+
+	for i, entry := range sources {
+		entryCleanup, err := resolveAndOverlay(entry, targetDir)
+		if err != nil {
+			runCleanups()
+			return nil, fmt.Errorf("source[%d]: %w", i, err)
+		}
+		if entryCleanup != nil {
+			cleanups = append(cleanups, entryCleanup)
+		}
+	}
+
+	if len(cleanups) == 0 {
+		return nil, nil
+	}
+	return runCleanups, nil
+}
+
+// resolveAndOverlay resolves a single source entry and overlays it into targetDir.
+func resolveAndOverlay(entry api.SourceEntry, targetDir string) (func(), error) {
+	uri := entry.URI()
+	if uri == "" {
+		return nil, nil
+	}
+
+	var localPath string
+	var cleanup func()
+	var err error
+
+	if entry.Recursive && entry.OCM != "" {
+		localPath, cleanup, err = resolve.ResolveOCMRecursive(entry.OCM)
+	} else {
+		localPath, cleanup, err = resolve.Resolve(uri)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("resolving %q: %w", uri, err)
+	}
+
+	dest := targetDir
+	if entry.Path != "" {
+		dest = filepath.Join(targetDir, entry.Path)
+	}
+
+	if err := overlaySource(localPath, dest); err != nil {
+		if cleanup != nil {
+			cleanup()
+		}
+		return nil, fmt.Errorf("overlaying %q: %w", uri, err)
+	}
+
+	return cleanup, nil
+}
+
+// overlaySource copies resolved content into dest.
+// If resolvedPath is a directory, its contents are copied recursively.
+// If resolvedPath is a file, it is copied into dest/.
+func overlaySource(resolvedPath, dest string) error {
+	info, err := os.Stat(resolvedPath)
+	if err != nil {
+		return fmt.Errorf("stat %s: %w", resolvedPath, err)
+	}
+
+	if info.IsDir() {
+		return copyTree(resolvedPath, dest)
+	}
+
+	// Single file: ensure dest directory exists, then copy the file.
+	if err := os.MkdirAll(dest, 0o750); err != nil {
+		return fmt.Errorf("creating directory %s: %w", dest, err)
+	}
+	target := filepath.Join(dest, filepath.Base(resolvedPath))
+	data, err := os.ReadFile(resolvedPath)
+	if err != nil {
+		return fmt.Errorf("reading %s: %w", resolvedPath, err)
+	}
+	if err := os.WriteFile(target, data, info.Mode()); err != nil {
+		return fmt.Errorf("writing %s: %w", target, err)
+	}
+	return nil
 }
 
 func removeConfigFiles(root string) error {

@@ -50,6 +50,7 @@ pkgs.mkShell {
   name = "go-devshell";
 
   buildInputs = with pkgs; [
+    gnumake
     goPkg
     (golangci-lint.override { buildGo125Module = buildGo125Module.override { go = goPkg; }; })
     goreleaser

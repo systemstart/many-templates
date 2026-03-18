@@ -2,6 +2,7 @@ package api
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 )
 
@@ -27,10 +28,18 @@ func (p *Pipeline) Validate() error {
 		return fmt.Errorf("pipeline has no steps")
 	}
 
+	if err := validateSources(p.Source, "pipeline"); err != nil {
+		return err
+	}
+
+	return validateSteps(p.Pipeline)
+}
+
+func validateSteps(steps []StepConfig) error {
 	names := make(map[string]int)
 	outputProducers := make(map[string]bool)
 
-	for i, step := range p.Pipeline {
+	for i, step := range steps {
 		if step.Name == "" {
 			return fmt.Errorf("step %d: name is required", i)
 		}
@@ -38,6 +47,10 @@ func (p *Pipeline) Validate() error {
 			return fmt.Errorf("step %d: duplicate step name %q (first defined at step %d)", i, step.Name, prev)
 		}
 		names[step.Name] = i
+
+		if err := validateSources(step.Source, fmt.Sprintf("step %q", step.Name)); err != nil {
+			return err
+		}
 
 		if !validStepTypes[step.Type] {
 			return fmt.Errorf("step %q: unknown type %q", step.Name, step.Type)
@@ -120,6 +133,44 @@ func validateSplitConfig(step StepConfig, outputProducers map[string]bool) error
 	}
 	if step.Split.By == SplitByCustom && step.Split.FileNameTemplate == "" {
 		return fmt.Errorf("split.fileNameTemplate is required when split.by is %q", SplitByCustom)
+	}
+	return nil
+}
+
+func validateSources(sources Sources, label string) error {
+	for i, entry := range sources {
+		if err := validateSourceEntry(entry); err != nil {
+			return fmt.Errorf("%s: source[%d]: %w", label, i, err)
+		}
+	}
+	return nil
+}
+
+func validateSourceEntry(entry SourceEntry) error {
+	if entry.SchemeCount() == 0 {
+		return fmt.Errorf("exactly one of oci, https, file, or ocm must be set")
+	}
+	if entry.SchemeCount() > 1 {
+		return fmt.Errorf("exactly one of oci, https, file, or ocm must be set, got %d", entry.SchemeCount())
+	}
+	if entry.Recursive && entry.OCM == "" {
+		return fmt.Errorf("recursive is only valid when ocm is set")
+	}
+	if entry.Path != "" {
+		if err := validateSourcePath(entry.Path); err != nil {
+			return fmt.Errorf("invalid path: %w", err)
+		}
+	}
+	return nil
+}
+
+func validateSourcePath(p string) error {
+	if filepath.IsAbs(p) {
+		return fmt.Errorf("path must be relative, got %q", p)
+	}
+	cleaned := filepath.Clean(p)
+	if cleaned == ".." || strings.HasPrefix(cleaned, ".."+string(filepath.Separator)) {
+		return fmt.Errorf("path must not traverse above pipeline directory, got %q", p)
 	}
 	return nil
 }

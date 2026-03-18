@@ -12,6 +12,7 @@ import (
 	"github.com/systemstart/many-templates/pkg/api"
 	"github.com/systemstart/many-templates/pkg/logging"
 	"github.com/systemstart/many-templates/pkg/processing"
+	"github.com/systemstart/many-templates/pkg/resolve"
 )
 
 var version = func() string {
@@ -66,9 +67,14 @@ func init() {
 		"instances YAML file for matrix mode")
 	flag.StringVar(
 		&inputDirectory,
+		"input",
+		"",
+		"input directory (or URI)")
+	flag.StringVar(
+		&inputDirectory,
 		"input-directory",
 		"",
-		"input directory")
+		"input directory (alias for -input)")
 	flag.StringVar(
 		&outputDirectory,
 		"output-directory",
@@ -106,7 +112,34 @@ func init() {
 		"print version and exit")
 }
 
+func runPull(args []string) {
+	if len(args) != 2 {
+		fmt.Fprintf(os.Stderr, "usage: many pull <ref> <dir>\n")
+		os.Exit(1)
+	}
+	ref, dir := args[0], args[1]
+
+	resolved, cleanup, err := resolve.Resolve(ref)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+	if cleanup != nil {
+		defer cleanup()
+	}
+
+	if err := processing.CopyTree(resolved, dir); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+}
+
 func main() {
+	if len(os.Args) >= 2 && os.Args[1] == "pull" {
+		runPull(os.Args[2:])
+		return
+	}
+
 	flag.Parse()
 
 	if showVersion {
@@ -117,7 +150,16 @@ func main() {
 	_ = logging.Initialize(loggingType, logLevel)
 
 	includeEnv()
-	checkInputDirectory()
+	cleanup := checkInputDirectory()
+	ctxCleanup := resolveContextFile()
+	instCleanup := resolveInstancesFile()
+	defer func() {
+		for _, fn := range []func(){cleanup, ctxCleanup, instCleanup} {
+			if fn != nil {
+				fn()
+			}
+		}
+	}()
 	ensureOutputDirectory()
 
 	if instancesFile != "" && processingFile != "" {
@@ -145,8 +187,11 @@ func runInstancesMode(globalContext map[string]any) {
 		os.Exit(exitLoadInstancesFailed)
 	}
 
-	// Validate instance input directories exist.
+	// Validate instance input directories exist (skip remote URIs — resolved at processing time).
 	for _, inst := range cfg.Instances {
+		if inst.Input != "" && resolve.IsRemote(inst.Input) {
+			continue
+		}
 		instInputDir := inputDirectory
 		if inst.Input != "" {
 			instInputDir = filepath.Join(inputDirectory, inst.Input)
@@ -206,11 +251,18 @@ func includeEnv() {
 	}
 }
 
-func checkInputDirectory() {
+func checkInputDirectory() func() {
 	if inputDirectory == "" {
-		slog.Error("-input-directory not set")
+		slog.Error("-input not set")
 		os.Exit(exitInputDirectoryNotSpecified)
 	}
+
+	resolved, cleanup, err := resolve.Resolve(inputDirectory)
+	if err != nil {
+		slog.Error("failed to resolve input", "input", inputDirectory, "error", err)
+		os.Exit(exitInputDirectoryCheckFailed)
+	}
+	inputDirectory = resolved
 
 	st, err := os.Stat(inputDirectory)
 	if err != nil {
@@ -219,9 +271,50 @@ func checkInputDirectory() {
 	}
 
 	if !st.IsDir() {
-		slog.Error("-input-directory is not a directory", "directory", inputDirectory)
+		slog.Error("-input is not a directory", "directory", inputDirectory)
 		os.Exit(exitInputDirectoryNotADirectory)
 	}
+
+	return cleanup
+}
+
+func resolveContextFile() func() {
+	if contextFile == "" {
+		return nil
+	}
+	resolved, cleanup, err := resolve.Resolve(contextFile)
+	if err != nil {
+		slog.Error("failed to resolve context file", "file", contextFile, "error", err)
+		os.Exit(exitLoadContextFailed)
+	}
+	contextFile = resolved
+	return cleanup
+}
+
+func resolveInstancesFile() func() {
+	if instancesFile == "" {
+		return nil
+	}
+	resolved, cleanup, err := resolve.Resolve(instancesFile)
+	if err != nil {
+		slog.Error("failed to resolve instances file", "file", instancesFile, "error", err)
+		os.Exit(exitLoadInstancesFailed)
+	}
+
+	// If resolution produced a directory, look for instances.yaml/yml inside it.
+	st, stErr := os.Stat(resolved)
+	if stErr == nil && st.IsDir() {
+		for _, name := range []string{"instances.yaml", "instances.yml"} {
+			candidate := filepath.Join(resolved, name)
+			if _, cErr := os.Stat(candidate); cErr == nil {
+				resolved = candidate
+				break
+			}
+		}
+	}
+
+	instancesFile = resolved
+	return cleanup
 }
 
 func ensureOutputDirectory() {

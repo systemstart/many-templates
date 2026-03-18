@@ -12,7 +12,7 @@ test:
 	@total=$$(go tool cover -func=$(COVERPROFILE) | awk '/^total:/ {gsub(/%/,"",$$NF); print $$NF}'); \
 	printf "Total coverage: %s%%\n" "$$total"; \
 	if awk "BEGIN{exit !($$total < $(COVERAGE_THRESHOLD))}"; then \
-		echo "FAIL: coverage $$total%% is below $(COVERAGE_THRESHOLD)%%"; \
+		printf "FAIL: coverage %s%% is below %d%%\n" "$$total" "$(COVERAGE_THRESHOLD)"; \
 		exit 1; \
 	fi
 

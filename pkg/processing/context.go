@@ -3,7 +3,6 @@ package processing
 import (
 	"bytes"
 	"fmt"
-	"maps"
 	"os"
 	"strings"
 	"text/template"
@@ -97,11 +96,22 @@ func renderString(s string, data map[string]any) (string, error) {
 	return buf.String(), nil
 }
 
-// MergeContext performs a shallow merge of local context over global context.
-// Local keys override global keys at the top level.
+// MergeContext performs a deep merge of local context over global context.
+// For map values, merging is recursive. For all other types (including slices),
+// local values replace global values.
 func MergeContext(global, local map[string]any) map[string]any {
 	merged := make(map[string]any, len(global)+len(local))
-	maps.Copy(merged, global)
-	maps.Copy(merged, local)
+	for k, v := range global {
+		merged[k] = v
+	}
+	for k, v := range local {
+		if localMap, ok := v.(map[string]any); ok {
+			if globalMap, ok := merged[k].(map[string]any); ok {
+				merged[k] = MergeContext(globalMap, localMap)
+				continue
+			}
+		}
+		merged[k] = v
+	}
 	return merged
 }

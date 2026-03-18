@@ -1,5 +1,11 @@
 package api
 
+import (
+	"fmt"
+
+	"gopkg.in/yaml.v3"
+)
+
 const (
 	DefaultFileInclude = "**/*"
 
@@ -16,8 +22,77 @@ const (
 	SplitByCustom   = "custom"
 )
 
+// SourceEntry represents a single source to fetch and overlay.
+type SourceEntry struct {
+	OCI       string `yaml:"oci,omitempty"`
+	HTTPS     string `yaml:"https,omitempty"`
+	File      string `yaml:"file,omitempty"`
+	OCM       string `yaml:"ocm,omitempty"`
+	Recursive bool   `yaml:"recursive,omitempty"` // only valid with OCM
+	Path      string `yaml:"path,omitempty"`      // target subdirectory within pipeline dir
+}
+
+// URI returns the resolve-compatible URI string.
+func (e SourceEntry) URI() string {
+	switch {
+	case e.OCI != "":
+		return "oci://" + e.OCI
+	case e.HTTPS != "":
+		return e.HTTPS
+	case e.File != "":
+		return e.File
+	case e.OCM != "":
+		return "ocm://" + e.OCM
+	default:
+		return ""
+	}
+}
+
+// SchemeCount returns how many scheme keys are set (for validation).
+func (e SourceEntry) SchemeCount() int {
+	n := 0
+	if e.OCI != "" {
+		n++
+	}
+	if e.HTTPS != "" {
+		n++
+	}
+	if e.File != "" {
+		n++
+	}
+	if e.OCM != "" {
+		n++
+	}
+	return n
+}
+
+// Sources handles YAML polymorphism: single map or list of maps.
+type Sources []SourceEntry
+
+// UnmarshalYAML decodes either a single source map or a list of source maps.
+func (s *Sources) UnmarshalYAML(value *yaml.Node) error {
+	if value.Kind == yaml.SequenceNode {
+		var list []SourceEntry
+		if err := value.Decode(&list); err != nil {
+			return fmt.Errorf("decoding source list: %w", err)
+		}
+		*s = list
+		return nil
+	}
+	if value.Kind == yaml.MappingNode {
+		var single SourceEntry
+		if err := value.Decode(&single); err != nil {
+			return fmt.Errorf("decoding source entry: %w", err)
+		}
+		*s = Sources{single}
+		return nil
+	}
+	return fmt.Errorf("source must be a map or list of maps")
+}
+
 // Pipeline is the .many.yaml configuration format.
 type Pipeline struct {
+	Source   Sources        `yaml:"source,omitempty"`
 	Context  map[string]any `yaml:"context"`
 	Pipeline []StepConfig   `yaml:"pipeline"`
 
@@ -30,6 +105,7 @@ type Pipeline struct {
 type StepConfig struct {
 	Name      string           `yaml:"name"`
 	Type      string           `yaml:"type"`
+	Source    Sources          `yaml:"source,omitempty"`
 	Template  *TemplateConfig  `yaml:"template,omitempty"`
 	Kustomize *KustomizeConfig `yaml:"kustomize,omitempty"`
 	Helm      *HelmConfig      `yaml:"helm,omitempty"`

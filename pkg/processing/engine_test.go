@@ -720,6 +720,198 @@ pipeline:
 	assertFileContent(t, filepath.Join(dst, "good-out", "good", "file.txt"), "works")
 }
 
+func TestRunSingle_PipelineOutsideInput(t *testing.T) {
+	src := t.TempDir()
+	dst := filepath.Join(t.TempDir(), "output")
+
+	// Create a valid pipeline file outside the input directory
+	otherDir := t.TempDir()
+	pipelineFile := filepath.Join(otherDir, ".many.yaml")
+	writeTestFile(t, pipelineFile, `
+pipeline:
+  - name: render
+    type: template
+`)
+	writeTestFile(t, filepath.Join(src, "file.txt"), "content")
+
+	err := RunSingle(pipelineFile, src, dst, nil, "")
+	if err == nil {
+		t.Fatal("expected error for pipeline file outside input dir")
+	}
+	if !strings.Contains(err.Error(), "not within input directory") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestRunInstances_WithInputSubdirectory(t *testing.T) {
+	src := t.TempDir()
+
+	// Create a subdirectory with pipeline
+	sub := filepath.Join(src, "apps")
+	mkdirAll(t, sub)
+	writeTestFile(t, filepath.Join(sub, ".many.yaml"), `
+pipeline:
+  - name: render
+    type: template
+    template:
+      files:
+        include: ["*.txt"]
+`)
+	writeTestFile(t, filepath.Join(sub, "greeting.txt"), "Hello {{ .who }}!")
+
+	dst := filepath.Join(t.TempDir(), "output")
+
+	cfg := &api.InstancesConfig{
+		Instances: []api.Instance{
+			{Name: "sub-inst", Input: "apps", Output: "out", Context: map[string]any{"who": "World"}},
+		},
+	}
+
+	if err := RunInstances(cfg, src, dst, nil, -1, ""); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	assertFileContent(t, filepath.Join(dst, "out", "greeting.txt"), "Hello World!")
+}
+
+func TestRunInstances_EmptyInput(t *testing.T) {
+	src := setupInstancesSource(t)
+	dst := filepath.Join(t.TempDir(), "output")
+
+	cfg := &api.InstancesConfig{
+		Instances: []api.Instance{
+			{Name: "empty-input", Input: "", Output: "out", Context: map[string]any{"name": "Test"}},
+		},
+	}
+
+	if err := RunInstances(cfg, src, dst, nil, -1, ""); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	assertFileContent(t, filepath.Join(dst, "out", "app", "greeting.txt"), "Hello Test!")
+}
+
+func TestRunPipeline_WithPipelineSource(t *testing.T) {
+	// Create a source directory with template files
+	sourceDir := t.TempDir()
+	writeTestFile(t, filepath.Join(sourceDir, "base.yaml"), "name: {{ .name }}")
+
+	// Create pipeline working directory
+	dir := t.TempDir()
+
+	pipeline := &api.Pipeline{
+		Dir:     dir,
+		Source:  api.Sources{{File: sourceDir}},
+		Context: map[string]any{"name": "test-value"},
+		Pipeline: []api.StepConfig{
+			{
+				Name:     "render",
+				Type:     api.StepTypeTemplate,
+				Template: &api.TemplateConfig{Files: api.FileFilter{Include: []string{"*.yaml"}}},
+			},
+		},
+	}
+
+	if err := RunPipeline(pipeline, nil); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// The source file should have been overlaid and rendered
+	assertFileContent(t, filepath.Join(dir, "base.yaml"), "name: test-value")
+}
+
+func TestRunPipeline_WithSourcePath(t *testing.T) {
+	// Create a source directory with files
+	sourceDir := t.TempDir()
+	mkdirAll(t, filepath.Join(sourceDir, "crds"))
+	writeTestFile(t, filepath.Join(sourceDir, "crds", "crd.yaml"), "kind: CRD")
+
+	// Create pipeline working directory
+	dir := t.TempDir()
+
+	pipeline := &api.Pipeline{
+		Dir: dir,
+		Source: api.Sources{{
+			File: sourceDir,
+			Path: "subdir/",
+		}},
+		Pipeline: []api.StepConfig{
+			{
+				Name:     "render",
+				Type:     api.StepTypeTemplate,
+				Template: &api.TemplateConfig{Files: api.FileFilter{Include: []string{"**/*.yaml"}}},
+			},
+		},
+	}
+
+	if err := RunPipeline(pipeline, nil); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Files should land in the subdir/ path
+	assertFileContent(t, filepath.Join(dir, "subdir", "crds", "crd.yaml"), "kind: CRD")
+}
+
+func TestRunPipeline_WithStepSource(t *testing.T) {
+	// Create a source directory with a template file
+	sourceDir := t.TempDir()
+	writeTestFile(t, filepath.Join(sourceDir, "step-file.yaml"), "value: {{ .val }}")
+
+	// Create pipeline working directory
+	dir := t.TempDir()
+
+	pipeline := &api.Pipeline{
+		Dir:     dir,
+		Context: map[string]any{"val": "from-step"},
+		Pipeline: []api.StepConfig{
+			{
+				Name:     "render",
+				Type:     api.StepTypeTemplate,
+				Source:   api.Sources{{File: sourceDir}},
+				Template: &api.TemplateConfig{Files: api.FileFilter{Include: []string{"*.yaml"}}},
+			},
+		},
+	}
+
+	if err := RunPipeline(pipeline, nil); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// The step source file should be overlaid and rendered
+	assertFileContent(t, filepath.Join(dir, "step-file.yaml"), "value: from-step")
+}
+
+func TestOverlaySource_Directory(t *testing.T) {
+	// Create source directory with nested files
+	src := t.TempDir()
+	mkdirAll(t, filepath.Join(src, "sub"))
+	writeTestFile(t, filepath.Join(src, "a.txt"), "alpha")
+	writeTestFile(t, filepath.Join(src, "sub", "b.txt"), "beta")
+
+	// Overlay into a new destination
+	dst := filepath.Join(t.TempDir(), "dest")
+	if err := overlaySource(src, dst); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	assertFileContent(t, filepath.Join(dst, "a.txt"), "alpha")
+	assertFileContent(t, filepath.Join(dst, "sub", "b.txt"), "beta")
+}
+
+func TestOverlaySource_SingleFile(t *testing.T) {
+	// Create a single source file
+	src := t.TempDir()
+	writeTestFile(t, filepath.Join(src, "single.yaml"), "content: here")
+
+	// Overlay the single file into a destination directory
+	dst := filepath.Join(t.TempDir(), "dest")
+	if err := overlaySource(filepath.Join(src, "single.yaml"), dst); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	assertFileContent(t, filepath.Join(dst, "single.yaml"), "content: here")
+}
+
 func TestRunAll_FailedPipeline(t *testing.T) {
 	src := t.TempDir()
 	dst := filepath.Join(t.TempDir(), "output")
