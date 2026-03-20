@@ -98,12 +98,13 @@ are rendered as Go templates with [Sprig](https://masterminds.github.io/sprig/)
 functions.
 
 **SHA-256 verification** --- the `sha256` field pins a source to a known checksum.
-When set (e.g. `sha256: "b74106509bbce..."`) `many` verifies the download matches
-before proceeding. An empty string disables verification, useful during development.
+When set `many` verifies the download matches
+before proceeding. An empty string disables verification, useful during development. 
+The checksum will be set if empty, unless `-no-sha256-update` is provided. Note: that doesn't
+update existing checksum, to update they have to be emptied manually first.
 
 **Renovate integration** --- the `# renovate:` comment is a
-[Renovate](https://docs.renovatebot.com/) annotation. Renovate parses it to
-auto-create pull requests when a new version is available, updating both the URL
+[Renovate](https://docs.renovatebot.com/) annotation. Renovate can be configured to update both the URL
 and the `sha256` checksum.
 
 ```bash
