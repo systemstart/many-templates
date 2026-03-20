@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"log/slog"
+	"os"
 	"os/exec"
 	"path/filepath"
 
@@ -27,31 +28,9 @@ func (s *helmStep) Run(ctx StepContext) (*StepResult, error) {
 		return nil, fmt.Errorf("helm binary not found in PATH: %w", err)
 	}
 
-	chart := s.cfg.Chart
-	if !filepath.IsAbs(chart) {
-		chart = filepath.Join(ctx.WorkDir, chart)
-	}
+	args := s.buildArgs(ctx.WorkDir)
 
-	args := []string{"template", s.cfg.ReleaseName, chart}
-
-	ns := s.cfg.Namespace
-	if ns == "" {
-		ns = "default"
-	}
-	args = append(args, "--namespace", ns)
-
-	for _, vf := range s.cfg.ValuesFiles {
-		if !filepath.IsAbs(vf) {
-			vf = filepath.Join(ctx.WorkDir, vf)
-		}
-		args = append(args, "--values", vf)
-	}
-
-	for k, v := range s.cfg.Set {
-		args = append(args, "--set", fmt.Sprintf("%s=%s", k, v))
-	}
-
-	slog.Info("running helm template", "step", s.name, "chart", chart)
+	slog.Info("running helm template", "step", s.name, "chart", s.cfg.Chart)
 
 	cmd := exec.Command("helm", args...)
 	cmd.Dir = ctx.WorkDir
@@ -64,5 +43,49 @@ func (s *helmStep) Run(ctx StepContext) (*StepResult, error) {
 		return nil, fmt.Errorf("helm template failed: %w\nstderr: %s", err, stderr.String())
 	}
 
-	return &StepResult{Output: stdout.Bytes()}, nil
+	if s.cfg.OutputFile != "" {
+		if err := writeOutputFile(filepath.Join(ctx.WorkDir, s.cfg.OutputFile), stdout.Bytes()); err != nil {
+			return nil, err
+		}
+	}
+
+	return &StepResult{}, nil
+}
+
+func (s *helmStep) buildArgs(workDir string) []string {
+	chart := s.cfg.Chart
+	if !filepath.IsAbs(chart) {
+		chart = filepath.Join(workDir, chart)
+	}
+
+	args := []string{"template", s.cfg.ReleaseName, chart}
+
+	ns := s.cfg.Namespace
+	if ns == "" {
+		ns = "default"
+	}
+	args = append(args, "--namespace", ns)
+
+	for _, vf := range s.cfg.ValuesFiles {
+		if !filepath.IsAbs(vf) {
+			vf = filepath.Join(workDir, vf)
+		}
+		args = append(args, "--values", vf)
+	}
+
+	for k, v := range s.cfg.Set {
+		args = append(args, "--set", fmt.Sprintf("%s=%s", k, v))
+	}
+
+	return args
+}
+
+func writeOutputFile(path string, data []byte) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+		return fmt.Errorf("creating output directory: %w", err)
+	}
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		return fmt.Errorf("writing output file: %w", err)
+	}
+	return nil
 }

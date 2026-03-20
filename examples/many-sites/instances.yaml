@@ -1,7 +1,7 @@
 instances:
   # Fediverse: social networking services
   - name: fediverse
-    input: ""
+    input: "services"
     output: fediverse.example/
     include:
       - dex
@@ -25,7 +25,7 @@ instances:
 
   # Development: code hosting, CI/CD, container registry
   - name: development
-    input: ""
+    input: "services"
     output: development.example/
     include:
       - dex

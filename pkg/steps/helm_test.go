@@ -46,19 +46,20 @@ data:
 		Chart:       "test-chart",
 		ReleaseName: "myrelease",
 		Namespace:   "test-ns",
+		OutputFile:  "out.yaml",
 	})
 
-	result, err := step.Run(StepContext{WorkDir: dir})
+	_, err := step.Run(StepContext{WorkDir: dir})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result == nil || len(result.Output) == 0 {
-		t.Fatal("expected non-empty output")
-	}
 
-	output := string(result.Output)
-	if !strings.Contains(output, "myrelease-cm") {
-		t.Errorf("output should contain release name in configmap, got:\n%s", output)
+	content, readErr := os.ReadFile(filepath.Join(dir, "out.yaml"))
+	if readErr != nil {
+		t.Fatalf("expected output file to exist: %v", readErr)
+	}
+	if !strings.Contains(string(content), "myrelease-cm") {
+		t.Errorf("output should contain release name in configmap, got:\n%s", string(content))
 	}
 }
 
@@ -80,15 +81,20 @@ spec:
 		Chart:       "test-chart",
 		ReleaseName: "myapp",
 		ValuesFiles: []string{"custom-values.yaml"},
+		OutputFile:  "out.yaml",
 	})
 
-	result, err := step.Run(StepContext{WorkDir: dir})
+	_, err := step.Run(StepContext{WorkDir: dir})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if !strings.Contains(string(result.Output), "replicas: 5") {
-		t.Errorf("output should contain overridden replica count, got:\n%s", string(result.Output))
+	content, readErr := os.ReadFile(filepath.Join(dir, "out.yaml"))
+	if readErr != nil {
+		t.Fatalf("expected output file to exist: %v", readErr)
+	}
+	if !strings.Contains(string(content), "replicas: 5") {
+		t.Errorf("output should contain overridden replica count, got:\n%s", string(content))
 	}
 }
 
@@ -108,15 +114,20 @@ spec:
 		Chart:       "test-chart",
 		ReleaseName: "myapp",
 		Set:         map[string]string{"replicaCount": "3"},
+		OutputFile:  "out.yaml",
 	})
 
-	result, err := step.Run(StepContext{WorkDir: dir})
+	_, err := step.Run(StepContext{WorkDir: dir})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if !strings.Contains(string(result.Output), "replicas: 3") {
-		t.Errorf("output should contain set replica count, got:\n%s", string(result.Output))
+	content, readErr := os.ReadFile(filepath.Join(dir, "out.yaml"))
+	if readErr != nil {
+		t.Fatalf("expected output file to exist: %v", readErr)
+	}
+	if !strings.Contains(string(content), "replicas: 3") {
+		t.Errorf("output should contain set replica count, got:\n%s", string(content))
 	}
 }
 
@@ -153,14 +164,19 @@ metadata:
 	step := NewHelmStep("render", &api.HelmConfig{
 		Chart:       "test-chart",
 		ReleaseName: "myapp",
+		OutputFile:  "out.yaml",
 	})
 
-	result, err := step.Run(StepContext{WorkDir: dir})
+	_, err := step.Run(StepContext{WorkDir: dir})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if !strings.Contains(string(result.Output), "namespace: default") {
-		t.Errorf("expected default namespace, got:\n%s", string(result.Output))
+	content, readErr := os.ReadFile(filepath.Join(dir, "out.yaml"))
+	if readErr != nil {
+		t.Fatalf("expected output file to exist: %v", readErr)
+	}
+	if !strings.Contains(string(content), "namespace: default") {
+		t.Errorf("expected default namespace, got:\n%s", string(content))
 	}
 }

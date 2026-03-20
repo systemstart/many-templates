@@ -126,8 +126,6 @@ func TestSourceEntry_SchemeCount(t *testing.T) {
 func TestLoadPipeline_WithSource(t *testing.T) {
 	dir := t.TempDir()
 	pipelineYAML := `
-source:
-  oci: ghcr.io/myorg/base:v1.0.0
 pipeline:
   - name: render
     type: template
@@ -146,14 +144,6 @@ pipeline:
 	p, err := LoadPipeline(pipelineFile)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
-	}
-
-	// Check pipeline-level source
-	if len(p.Source) != 1 {
-		t.Fatalf("expected 1 pipeline source, got %d", len(p.Source))
-	}
-	if p.Source[0].OCI != "ghcr.io/myorg/base:v1.0.0" {
-		t.Errorf("expected oci source, got %+v", p.Source[0])
 	}
 
 	// Check step-level source

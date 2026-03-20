@@ -10,18 +10,22 @@ import (
 )
 
 func TestRunPipeline_ContextMerge(t *testing.T) {
-	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "test.yaml"), []byte("{{ .global }}-{{ .local }}"), 0o600); err != nil {
+	// Create a source directory with a template file.
+	sourceDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(sourceDir, "test.yaml"), []byte("{{ .global }}-{{ .local }}"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
+	workDir := t.TempDir()
+
 	pipeline := &api.Pipeline{
-		Dir:     dir,
+		Dir:     sourceDir,
 		Context: map[string]any{"local": "L"},
 		Pipeline: []api.StepConfig{
 			{
 				Name:     "render",
 				Type:     api.StepTypeTemplate,
+				Source:   api.Sources{{File: "."}},
 				Template: &api.TemplateConfig{Files: api.FileFilter{Include: []string{"*"}}},
 			},
 		},
@@ -29,43 +33,16 @@ func TestRunPipeline_ContextMerge(t *testing.T) {
 
 	globalCtx := map[string]any{"global": "G", "local": "overridden"}
 
-	if err := RunPipeline(pipeline, globalCtx); err != nil {
+	if err := RunPipeline(pipeline, globalCtx, workDir, true); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	content, err := os.ReadFile(filepath.Join(dir, "test.yaml"))
+	content, err := os.ReadFile(filepath.Join(workDir, "test.yaml"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if string(content) != "G-L" {
 		t.Errorf("expected 'G-L', got %q", string(content))
-	}
-}
-
-func TestRunPipeline_StepOutputRegistry(t *testing.T) {
-	dir := t.TempDir()
-
-	// Pipeline with a split step referencing a non-existent output
-	pipeline := &api.Pipeline{
-		Dir: dir,
-		Pipeline: []api.StepConfig{
-			{
-				Name: "split",
-				Type: api.StepTypeSplit,
-				Split: &api.SplitConfig{
-					Input: "missing",
-					By:    api.SplitByKind,
-				},
-			},
-		},
-	}
-
-	err := RunPipeline(pipeline, nil)
-	if err == nil {
-		t.Fatal("expected error for missing input")
-	}
-	if !strings.Contains(err.Error(), "not found in step outputs") {
-		t.Errorf("unexpected error: %v", err)
 	}
 }
 
@@ -141,13 +118,15 @@ func TestRunAll_Integration(t *testing.T) {
 	src := t.TempDir()
 	dst := filepath.Join(t.TempDir(), "output")
 
-	// Create a source tree with a .many.yaml and a template file
+	// Create a source tree with a .many.yaml and a template file.
 	if err := os.WriteFile(filepath.Join(src, ".many.yaml"), []byte(`
 context:
   name: world
 pipeline:
   - name: render
     type: template
+    source:
+      file: "."
     template:
       files:
         include: ["*.txt"]
@@ -158,7 +137,7 @@ pipeline:
 		t.Fatal(err)
 	}
 
-	if err := RunAll(src, dst, nil, -1, ""); err != nil {
+	if err := RunAll(src, dst, nil, -1, true); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -185,17 +164,14 @@ func TestRunAll_NoPipelines(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Should succeed with no pipelines (just copies tree)
-	if err := RunAll(src, dst, nil, -1, ""); err != nil {
+	// No pipelines => empty output (nothing promoted)
+	if err := RunAll(src, dst, nil, -1, true); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	content, err := os.ReadFile(filepath.Join(dst, "file.txt"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(content) != "content" {
-		t.Errorf("expected 'content', got %q", string(content))
+	// file.txt should NOT be in output (no pipeline, no copy)
+	if _, err := os.Stat(filepath.Join(dst, "file.txt")); !os.IsNotExist(err) {
+		t.Error("file.txt should not be in output when no pipelines found")
 	}
 }
 
@@ -254,6 +230,8 @@ context:
 pipeline:
   - name: render
     type: template
+    source:
+      file: "."
     template:
       files:
         include: ["*.yaml"]
@@ -266,7 +244,7 @@ pipeline:
 	}
 
 	pipelineFile := filepath.Join(src, ".many.yaml")
-	if err := RunSingle(pipelineFile, src, dst, nil, ""); err != nil {
+	if err := RunSingle(pipelineFile, src, dst, nil, true); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -327,112 +305,26 @@ func TestRelativeToInput(t *testing.T) {
 	}
 }
 
-func TestRemoveContextFile(t *testing.T) {
-	src := t.TempDir()
-	dst := t.TempDir()
-
-	// Create context file in both src and dst
-	if err := os.WriteFile(filepath.Join(src, "context.yaml"), []byte("key: val"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dst, "context.yaml"), []byte("key: val"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	// Should remove from dst
-	removeContextFile(filepath.Join(src, "context.yaml"), src, dst)
-
-	if _, err := os.Stat(filepath.Join(dst, "context.yaml")); !os.IsNotExist(err) {
-		t.Error("context.yaml should be removed from output")
-	}
-
-	// Empty contextFile is a no-op
-	removeContextFile("", src, dst)
-
-	// Context file outside input dir is a no-op
-	outside := filepath.Join(t.TempDir(), "external.yaml")
-	if err := os.WriteFile(outside, []byte("test"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dst, "external.yaml"), []byte("test"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	removeContextFile(outside, src, dst)
-	if _, err := os.Stat(filepath.Join(dst, "external.yaml")); err != nil {
-		t.Error("external.yaml should NOT be removed (outside input dir)")
-	}
-
-	// Nonexistent file in output is a no-op (no panic)
-	removeContextFile(filepath.Join(src, "missing.yaml"), src, dst)
-}
-
-func TestRunAll_WithContextFile(t *testing.T) {
-	src := t.TempDir()
-	dst := filepath.Join(t.TempDir(), "output")
-
-	if err := os.WriteFile(filepath.Join(src, ".many.yaml"), []byte(`
-context:
-  name: world
-pipeline:
-  - name: render
-    type: template
-    template:
-      files:
-        include: ["*.txt"]
-`), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(src, "hello.txt"), []byte("Hello {{ .name }}!"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(src, "context.yaml"), []byte("name: world"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	ctxFile := filepath.Join(src, "context.yaml")
-	if err := RunAll(src, dst, nil, -1, ctxFile); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	// context.yaml should be removed from output
-	if _, err := os.Stat(filepath.Join(dst, "context.yaml")); !os.IsNotExist(err) {
-		t.Error("context.yaml should be removed from output")
-	}
-
-	// Template should still render
-	content, err := os.ReadFile(filepath.Join(dst, "hello.txt"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(content) != "Hello world!" {
-		t.Errorf("expected 'Hello world!', got %q", string(content))
-	}
-}
-
 func TestRunAll_MaxDepth(t *testing.T) {
 	src := t.TempDir()
 	dst := filepath.Join(t.TempDir(), "output")
 
 	// Create nested pipelines at depth 0 and depth 1
-	if err := os.WriteFile(filepath.Join(src, ".many.yaml"), []byte(`
+	writeTestFile(t, filepath.Join(src, ".many.yaml"), `
 pipeline:
   - name: render
     type: template
+    source:
+      file: "."
     template:
       files:
         include: ["*.txt"]
-`), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(src, "root.txt"), []byte("root"), 0o600); err != nil {
-		t.Fatal(err)
-	}
+`)
+	writeTestFile(t, filepath.Join(src, "root.txt"), "root")
 
 	sub := filepath.Join(src, "sub")
-	if err := os.MkdirAll(sub, 0o750); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(sub, ".many.yaml"), []byte(`
+	mkdirAll(t, sub)
+	writeTestFile(t, filepath.Join(sub, ".many.yaml"), `
 context:
   val: deep
 pipeline:
@@ -441,95 +333,20 @@ pipeline:
     template:
       files:
         include: ["*.txt"]
-`), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(sub, "deep.txt"), []byte("{{ .val }}"), 0o600); err != nil {
-		t.Fatal(err)
-	}
+`)
+	writeTestFile(t, filepath.Join(sub, "deep.txt"), "{{ .val }}")
 
-	// maxDepth=0 should only process root
-	if err := RunAll(src, dst, nil, 0, ""); err != nil {
+	// maxDepth=0 should only process root pipeline
+	if err := RunAll(src, dst, nil, 0, true); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// deep.txt should NOT be rendered (sub pipeline skipped)
-	content, err := os.ReadFile(filepath.Join(dst, "sub", "deep.txt"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(content) != "{{ .val }}" {
-		t.Errorf("sub/deep.txt should not be rendered at maxDepth=0, got %q", string(content))
-	}
-}
+	// root.txt should be rendered
+	assertFileContent(t, filepath.Join(dst, "root.txt"), "root")
 
-func TestRunSingle_WithContextFile(t *testing.T) {
-	src := t.TempDir()
-	dst := filepath.Join(t.TempDir(), "output")
-
-	if err := os.WriteFile(filepath.Join(src, ".many.yaml"), []byte(`
-context:
-  v: ok
-pipeline:
-  - name: render
-    type: template
-    template:
-      files:
-        include: ["*.yaml"]
-        exclude: [".many.yaml", "context.yaml"]
-`), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(src, "data.yaml"), []byte("value: {{ .v }}"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(src, "context.yaml"), []byte("v: ok"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	ctxFile := filepath.Join(src, "context.yaml")
-	pipelineFile := filepath.Join(src, ".many.yaml")
-	if err := RunSingle(pipelineFile, src, dst, nil, ctxFile); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if _, err := os.Stat(filepath.Join(dst, "context.yaml")); !os.IsNotExist(err) {
-		t.Error("context.yaml should be removed from output")
-	}
-
-	content, err := os.ReadFile(filepath.Join(dst, "data.yaml"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(content) != "value: ok" {
-		t.Errorf("expected 'value: ok', got %q", string(content))
-	}
-}
-
-func TestRunSingle_NonexistentPipelineFile(t *testing.T) {
-	src := t.TempDir()
-	dst := filepath.Join(t.TempDir(), "output")
-
-	if err := os.WriteFile(filepath.Join(src, "file.txt"), []byte("content"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	err := RunSingle(filepath.Join(src, ".many.yaml"), src, dst, nil, "")
-	if err == nil {
-		t.Fatal("expected error for nonexistent pipeline file")
-	}
-}
-
-func setupFilteredTree(t *testing.T) string {
-	t.Helper()
-	src := t.TempDir()
-	writeTestFile(t, filepath.Join(src, "root.txt"), "root")
-	for _, name := range []string{"app1", "app2", "app3"} {
-		dir := filepath.Join(src, name)
-		mkdirAll(t, dir)
-		writeTestFile(t, filepath.Join(dir, "data.txt"), name)
-	}
-	return src
+	// sub/deep.txt should exist but NOT be rendered (sub pipeline skipped,
+	// but root pipeline's source: file: "." copies the entire directory)
+	assertFileContent(t, filepath.Join(dst, "sub", "deep.txt"), "{{ .val }}")
 }
 
 func writeTestFile(t *testing.T, path, content string) {
@@ -564,48 +381,6 @@ func assertNotExists(t *testing.T, path string) {
 	}
 }
 
-func TestCopyTreeFiltered(t *testing.T) {
-	src := setupFilteredTree(t)
-	dst := filepath.Join(t.TempDir(), "output")
-
-	if err := copyTreeFiltered(src, dst, []string{"app1", "app3"}); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	assertFileContent(t, filepath.Join(dst, "root.txt"), "root")
-	assertFileContent(t, filepath.Join(dst, "app1", "data.txt"), "app1")
-	assertFileContent(t, filepath.Join(dst, "app3", "data.txt"), "app3")
-	assertNotExists(t, filepath.Join(dst, "app2"))
-}
-
-func TestCopyTreeFiltered_EmptyInclude(t *testing.T) {
-	src := t.TempDir()
-
-	if err := os.WriteFile(filepath.Join(src, "root.txt"), []byte("root"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.MkdirAll(filepath.Join(src, "sub"), 0o750); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(src, "sub", "file.txt"), []byte("sub"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	dst := filepath.Join(t.TempDir(), "output")
-
-	// Empty include = copy everything
-	if err := copyTreeFiltered(src, dst, nil); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if _, err := os.Stat(filepath.Join(dst, "root.txt")); err != nil {
-		t.Error("root.txt should exist")
-	}
-	if _, err := os.Stat(filepath.Join(dst, "sub", "file.txt")); err != nil {
-		t.Error("sub/file.txt should exist")
-	}
-}
-
 func setupInstancesSource(t *testing.T) string {
 	t.Helper()
 	src := t.TempDir()
@@ -615,6 +390,8 @@ func setupInstancesSource(t *testing.T) string {
 pipeline:
   - name: render
     type: template
+    source:
+      file: "."
     template:
       files:
         include: ["*.txt"]
@@ -634,7 +411,7 @@ func TestRunInstances_Integration(t *testing.T) {
 		},
 	}
 
-	if err := RunInstances(cfg, src, dst, nil, -1, ""); err != nil {
+	if err := RunInstances(cfg, src, dst, nil, -1, true); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -651,6 +428,8 @@ func setupMultiAppSource(t *testing.T, apps []string) string {
 pipeline:
   - name: render
     type: template
+    source:
+      file: "."
     template:
       files:
         include: ["*.txt"]
@@ -674,7 +453,7 @@ func TestRunInstances_IncludeFilter(t *testing.T) {
 		},
 	}
 
-	if err := RunInstances(cfg, src, dst, nil, -1, ""); err != nil {
+	if err := RunInstances(cfg, src, dst, nil, -1, true); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -689,6 +468,8 @@ func TestRunInstances_FailedInstance(t *testing.T) {
 pipeline:
   - name: render
     type: template
+    source:
+      file: "."
     template:
       files:
         include: ["*.txt"]
@@ -709,7 +490,7 @@ pipeline:
 		},
 	}
 
-	err := RunInstances(cfg, src, dst, nil, -1, "")
+	err := RunInstances(cfg, src, dst, nil, -1, true)
 	if err == nil {
 		t.Fatal("expected error for failed instance")
 	}
@@ -718,6 +499,20 @@ pipeline:
 	}
 
 	assertFileContent(t, filepath.Join(dst, "good-out", "good", "file.txt"), "works")
+}
+
+func TestRunSingle_NonexistentPipelineFile(t *testing.T) {
+	src := t.TempDir()
+	dst := filepath.Join(t.TempDir(), "output")
+
+	if err := os.WriteFile(filepath.Join(src, "file.txt"), []byte("content"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	err := RunSingle(filepath.Join(src, ".many.yaml"), src, dst, nil, true)
+	if err == nil {
+		t.Fatal("expected error for nonexistent pipeline file")
+	}
 }
 
 func TestRunSingle_PipelineOutsideInput(t *testing.T) {
@@ -731,10 +526,13 @@ func TestRunSingle_PipelineOutsideInput(t *testing.T) {
 pipeline:
   - name: render
     type: template
+    template:
+      files:
+        include: ["*.txt"]
 `)
 	writeTestFile(t, filepath.Join(src, "file.txt"), "content")
 
-	err := RunSingle(pipelineFile, src, dst, nil, "")
+	err := RunSingle(pipelineFile, src, dst, nil, true)
 	if err == nil {
 		t.Fatal("expected error for pipeline file outside input dir")
 	}
@@ -753,6 +551,8 @@ func TestRunInstances_WithInputSubdirectory(t *testing.T) {
 pipeline:
   - name: render
     type: template
+    source:
+      file: "."
     template:
       files:
         include: ["*.txt"]
@@ -767,7 +567,7 @@ pipeline:
 		},
 	}
 
-	if err := RunInstances(cfg, src, dst, nil, -1, ""); err != nil {
+	if err := RunInstances(cfg, src, dst, nil, -1, true); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -784,40 +584,40 @@ func TestRunInstances_EmptyInput(t *testing.T) {
 		},
 	}
 
-	if err := RunInstances(cfg, src, dst, nil, -1, ""); err != nil {
+	if err := RunInstances(cfg, src, dst, nil, -1, true); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
 	assertFileContent(t, filepath.Join(dst, "out", "app", "greeting.txt"), "Hello Test!")
 }
 
-func TestRunPipeline_WithPipelineSource(t *testing.T) {
+func TestRunPipeline_WithStepSourceBasic(t *testing.T) {
 	// Create a source directory with template files
 	sourceDir := t.TempDir()
 	writeTestFile(t, filepath.Join(sourceDir, "base.yaml"), "name: {{ .name }}")
 
 	// Create pipeline working directory
-	dir := t.TempDir()
+	workDir := t.TempDir()
 
 	pipeline := &api.Pipeline{
-		Dir:     dir,
-		Source:  api.Sources{{File: sourceDir}},
+		Dir:     sourceDir,
 		Context: map[string]any{"name": "test-value"},
 		Pipeline: []api.StepConfig{
 			{
 				Name:     "render",
 				Type:     api.StepTypeTemplate,
+				Source:   api.Sources{{File: "."}},
 				Template: &api.TemplateConfig{Files: api.FileFilter{Include: []string{"*.yaml"}}},
 			},
 		},
 	}
 
-	if err := RunPipeline(pipeline, nil); err != nil {
+	if err := RunPipeline(pipeline, nil, workDir, true); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
 	// The source file should have been overlaid and rendered
-	assertFileContent(t, filepath.Join(dir, "base.yaml"), "name: test-value")
+	assertFileContent(t, filepath.Join(workDir, "base.yaml"), "name: test-value")
 }
 
 func TestRunPipeline_WithSourcePath(t *testing.T) {
@@ -827,29 +627,29 @@ func TestRunPipeline_WithSourcePath(t *testing.T) {
 	writeTestFile(t, filepath.Join(sourceDir, "crds", "crd.yaml"), "kind: CRD")
 
 	// Create pipeline working directory
-	dir := t.TempDir()
+	workDir := t.TempDir()
 
 	pipeline := &api.Pipeline{
-		Dir: dir,
-		Source: api.Sources{{
-			File: sourceDir,
-			Path: "subdir/",
-		}},
+		Dir: sourceDir,
 		Pipeline: []api.StepConfig{
 			{
-				Name:     "render",
-				Type:     api.StepTypeTemplate,
+				Name: "render",
+				Type: api.StepTypeTemplate,
+				Source: api.Sources{{
+					File: ".",
+					Path: "subdir/",
+				}},
 				Template: &api.TemplateConfig{Files: api.FileFilter{Include: []string{"**/*.yaml"}}},
 			},
 		},
 	}
 
-	if err := RunPipeline(pipeline, nil); err != nil {
+	if err := RunPipeline(pipeline, nil, workDir, true); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
 	// Files should land in the subdir/ path
-	assertFileContent(t, filepath.Join(dir, "subdir", "crds", "crd.yaml"), "kind: CRD")
+	assertFileContent(t, filepath.Join(workDir, "subdir", "crds", "crd.yaml"), "kind: CRD")
 }
 
 func TestRunPipeline_WithStepSource(t *testing.T) {
@@ -858,27 +658,27 @@ func TestRunPipeline_WithStepSource(t *testing.T) {
 	writeTestFile(t, filepath.Join(sourceDir, "step-file.yaml"), "value: {{ .val }}")
 
 	// Create pipeline working directory
-	dir := t.TempDir()
+	workDir := t.TempDir()
 
 	pipeline := &api.Pipeline{
-		Dir:     dir,
+		Dir:     sourceDir,
 		Context: map[string]any{"val": "from-step"},
 		Pipeline: []api.StepConfig{
 			{
 				Name:     "render",
 				Type:     api.StepTypeTemplate,
-				Source:   api.Sources{{File: sourceDir}},
+				Source:   api.Sources{{File: "."}},
 				Template: &api.TemplateConfig{Files: api.FileFilter{Include: []string{"*.yaml"}}},
 			},
 		},
 	}
 
-	if err := RunPipeline(pipeline, nil); err != nil {
+	if err := RunPipeline(pipeline, nil, workDir, true); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
 	// The step source file should be overlaid and rendered
-	assertFileContent(t, filepath.Join(dir, "step-file.yaml"), "value: from-step")
+	assertFileContent(t, filepath.Join(workDir, "step-file.yaml"), "value: from-step")
 }
 
 func TestOverlaySource_Directory(t *testing.T) {
@@ -890,12 +690,17 @@ func TestOverlaySource_Directory(t *testing.T) {
 
 	// Overlay into a new destination
 	dst := filepath.Join(t.TempDir(), "dest")
-	if err := overlaySource(src, dst); err != nil {
+	paths, err := overlaySource(src, dst)
+	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
 	assertFileContent(t, filepath.Join(dst, "a.txt"), "alpha")
 	assertFileContent(t, filepath.Join(dst, "sub", "b.txt"), "beta")
+
+	if len(paths) == 0 {
+		t.Fatal("expected non-empty overlaid paths")
+	}
 }
 
 func TestOverlaySource_SingleFile(t *testing.T) {
@@ -905,11 +710,166 @@ func TestOverlaySource_SingleFile(t *testing.T) {
 
 	// Overlay the single file into a destination directory
 	dst := filepath.Join(t.TempDir(), "dest")
-	if err := overlaySource(filepath.Join(src, "single.yaml"), dst); err != nil {
+	paths, err := overlaySource(filepath.Join(src, "single.yaml"), dst)
+	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
 	assertFileContent(t, filepath.Join(dst, "single.yaml"), "content: here")
+
+	if len(paths) != 1 {
+		t.Fatalf("expected 1 overlaid path, got %d", len(paths))
+	}
+	if paths[0] != filepath.Join(dst, "single.yaml") {
+		t.Errorf("expected %q, got %q", filepath.Join(dst, "single.yaml"), paths[0])
+	}
+}
+
+func TestRemoveOverlaidFiles(t *testing.T) {
+	dir := t.TempDir()
+
+	// Create directory structure: dir/sub/deep/file.txt and dir/other.txt
+	subDir := filepath.Join(dir, "sub")
+	deepDir := filepath.Join(subDir, "deep")
+	mkdirAll(t, deepDir)
+	writeTestFile(t, filepath.Join(deepDir, "file.txt"), "temp")
+	writeTestFile(t, filepath.Join(dir, "other.txt"), "keep") // not in overlaid paths
+
+	overlaidPaths := []string{
+		subDir,
+		deepDir,
+		filepath.Join(deepDir, "file.txt"),
+	}
+
+	removeOverlaidFiles(overlaidPaths)
+
+	// file.txt should be removed
+	assertNotExists(t, filepath.Join(deepDir, "file.txt"))
+	// deep/ should be removed (was empty after file removal)
+	assertNotExists(t, deepDir)
+	// sub/ should be removed (was empty after deep/ removal)
+	assertNotExists(t, subDir)
+	// other.txt should remain (not in overlaid paths)
+	assertFileContent(t, filepath.Join(dir, "other.txt"), "keep")
+}
+
+func TestRemoveOverlaidFiles_PreservesNonEmptyDir(t *testing.T) {
+	dir := t.TempDir()
+
+	subDir := filepath.Join(dir, "shared")
+	mkdirAll(t, subDir)
+	writeTestFile(t, filepath.Join(subDir, "temp.txt"), "temp")
+	writeTestFile(t, filepath.Join(subDir, "keep.txt"), "keep") // not in overlaid paths
+
+	overlaidPaths := []string{
+		subDir,
+		filepath.Join(subDir, "temp.txt"),
+	}
+
+	removeOverlaidFiles(overlaidPaths)
+
+	// temp.txt should be removed
+	assertNotExists(t, filepath.Join(subDir, "temp.txt"))
+	// shared/ should still exist because keep.txt is still there
+	assertFileContent(t, filepath.Join(subDir, "keep.txt"), "keep")
+}
+
+func TestRunPipeline_TemporarySourceCleaned(t *testing.T) {
+	// Create a source directory with files
+	sourceDir := t.TempDir()
+	writeTestFile(t, filepath.Join(sourceDir, "upstream.yaml"), "kind: Deployment")
+
+	// Create pipeline working directory
+	workDir := t.TempDir()
+
+	pipeline := &api.Pipeline{
+		Dir: sourceDir,
+		Pipeline: []api.StepConfig{
+			{
+				Name: "render",
+				Type: api.StepTypeTemplate,
+				Source: api.Sources{{
+					File:      ".",
+					Temporary: true,
+				}},
+				Template: &api.TemplateConfig{Files: api.FileFilter{Include: []string{"*.yaml"}}},
+			},
+		},
+	}
+
+	if err := RunPipeline(pipeline, nil, workDir, true); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Temporary source file should be removed after pipeline execution
+	assertNotExists(t, filepath.Join(workDir, "upstream.yaml"))
+}
+
+func TestRunPipeline_NonTemporarySourceRemains(t *testing.T) {
+	// Create a source directory with files
+	sourceDir := t.TempDir()
+	writeTestFile(t, filepath.Join(sourceDir, "base.yaml"), "kind: Service")
+
+	// Create pipeline working directory
+	workDir := t.TempDir()
+
+	pipeline := &api.Pipeline{
+		Dir: sourceDir,
+		Pipeline: []api.StepConfig{
+			{
+				Name: "render",
+				Type: api.StepTypeTemplate,
+				Source: api.Sources{{
+					File: ".",
+				}},
+				Template: &api.TemplateConfig{Files: api.FileFilter{Include: []string{"*.yaml"}}},
+			},
+		},
+	}
+
+	if err := RunPipeline(pipeline, nil, workDir, true); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Non-temporary source file should remain
+	assertFileContent(t, filepath.Join(workDir, "base.yaml"), "kind: Service")
+}
+
+func TestRunPipeline_TemporarySourceWithPath(t *testing.T) {
+	// Create a source directory with files
+	sourceDir := t.TempDir()
+	writeTestFile(t, filepath.Join(sourceDir, "upstream.yaml"), "kind: Deployment")
+
+	// Create pipeline working directory with an existing file
+	workDir := t.TempDir()
+	writeTestFile(t, filepath.Join(workDir, "existing.yaml"), "kind: Namespace")
+
+	pipeline := &api.Pipeline{
+		Dir: sourceDir,
+		Pipeline: []api.StepConfig{
+			{
+				Name: "render",
+				Type: api.StepTypeTemplate,
+				Source: api.Sources{{
+					File:      ".",
+					Path:      "vendor/",
+					Temporary: true,
+				}},
+				Template: &api.TemplateConfig{Files: api.FileFilter{Include: []string{"**/*.yaml"}}},
+			},
+		},
+	}
+
+	if err := RunPipeline(pipeline, nil, workDir, true); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Temporary source file and its directory should be cleaned up
+	assertNotExists(t, filepath.Join(workDir, "vendor", "upstream.yaml"))
+	assertNotExists(t, filepath.Join(workDir, "vendor"))
+
+	// Existing file should remain
+	assertFileContent(t, filepath.Join(workDir, "existing.yaml"), "kind: Namespace")
 }
 
 func TestRunAll_FailedPipeline(t *testing.T) {
@@ -921,6 +881,8 @@ func TestRunAll_FailedPipeline(t *testing.T) {
 pipeline:
   - name: render
     type: template
+    source:
+      file: "."
     template:
       files:
         include: ["*.txt"]
@@ -931,11 +893,279 @@ pipeline:
 		t.Fatal(err)
 	}
 
-	err := RunAll(src, dst, nil, -1, "")
+	err := RunAll(src, dst, nil, -1, true)
 	if err == nil {
 		t.Fatal("expected error for failed pipeline")
 	}
 	if !strings.Contains(err.Error(), "pipeline(s) failed") {
 		t.Errorf("unexpected error message: %v", err)
 	}
+
+	// Staging directory should be preserved for inspection
+	stagingDir := filepath.Join(dst, ".many-tmp")
+	if _, err := os.Stat(stagingDir); os.IsNotExist(err) {
+		t.Error(".many-tmp staging directory should be preserved on failure")
+	}
+}
+
+func TestRunAll_Success_NoStagingDir(t *testing.T) {
+	src := t.TempDir()
+	dst := filepath.Join(t.TempDir(), "output")
+
+	writeTestFile(t, filepath.Join(src, ".many.yaml"), `
+context:
+  name: world
+pipeline:
+  - name: render
+    type: template
+    source:
+      file: "."
+    template:
+      files:
+        include: ["*.txt"]
+`)
+	writeTestFile(t, filepath.Join(src, "hello.txt"), "Hello {{ .name }}!")
+
+	if err := RunAll(src, dst, nil, -1, true); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Staging directory should not exist after success
+	assertNotExists(t, filepath.Join(dst, ".many-tmp"))
+
+	// Output should be in dst directly
+	assertFileContent(t, filepath.Join(dst, "hello.txt"), "Hello world!")
+}
+
+func TestRunSingle_Failure_LeavesStagingDir(t *testing.T) {
+	src := t.TempDir()
+	dst := filepath.Join(t.TempDir(), "output")
+
+	writeTestFile(t, filepath.Join(src, ".many.yaml"), `
+pipeline:
+  - name: render
+    type: template
+    source:
+      file: "."
+    template:
+      files:
+        include: ["*.txt"]
+`)
+	writeTestFile(t, filepath.Join(src, "bad.txt"), "{{ .missing | fail }}")
+
+	pipelineFile := filepath.Join(src, ".many.yaml")
+	err := RunSingle(pipelineFile, src, dst, nil, true)
+	if err == nil {
+		t.Fatal("expected error for failed pipeline")
+	}
+
+	// Staging directory should be preserved
+	stagingDir := filepath.Join(dst, ".many-tmp")
+	if _, err := os.Stat(stagingDir); os.IsNotExist(err) {
+		t.Error(".many-tmp staging directory should be preserved on failure")
+	}
+}
+
+func TestRunInstances_PartialFailure_IndependentStaging(t *testing.T) {
+	src := t.TempDir()
+	dst := filepath.Join(t.TempDir(), "output")
+	pipelineYAML := `
+pipeline:
+  - name: render
+    type: template
+    source:
+      file: "."
+    template:
+      files:
+        include: ["*.txt"]
+`
+	for _, name := range []string{"good", "bad"} {
+		dir := filepath.Join(src, name)
+		mkdirAll(t, dir)
+		writeTestFile(t, filepath.Join(dir, ".many.yaml"), pipelineYAML)
+	}
+	writeTestFile(t, filepath.Join(src, "good", "file.txt"), "{{ .v }}")
+	writeTestFile(t, filepath.Join(src, "bad", "file.txt"), "{{ .missing | fail }}")
+
+	cfg := &api.InstancesConfig{
+		Instances: []api.Instance{
+			{Name: "bad-inst", Output: "bad-out", Include: []string{"bad"}},
+			{Name: "good-inst", Output: "good-out", Include: []string{"good"}, Context: map[string]any{"v": "works"}},
+		},
+	}
+
+	err := RunInstances(cfg, src, dst, nil, -1, true)
+	if err == nil {
+		t.Fatal("expected error for failed instance")
+	}
+
+	// Successful instance should be promoted (no staging dir)
+	assertFileContent(t, filepath.Join(dst, "good-out", "good", "file.txt"), "works")
+	assertNotExists(t, filepath.Join(dst, "good-out", ".many-tmp"))
+
+	// Failed instance should have staging dir preserved
+	if _, err := os.Stat(filepath.Join(dst, "bad-out", ".many-tmp")); os.IsNotExist(err) {
+		t.Error("failed instance should have .many-tmp preserved")
+	}
+}
+
+func TestCleanStagingDir_RemovesStale(t *testing.T) {
+	dir := t.TempDir()
+	stagingDir := filepath.Join(dir, ".many-tmp")
+	mkdirAll(t, stagingDir)
+	writeTestFile(t, filepath.Join(stagingDir, "stale.txt"), "old data")
+
+	cleanStagingDir(stagingDir)
+
+	assertNotExists(t, stagingDir)
+}
+
+func TestPromoteStaging(t *testing.T) {
+	parent := t.TempDir()
+	stagingDir := filepath.Join(parent, ".many-tmp")
+	mkdirAll(t, stagingDir)
+	mkdirAll(t, filepath.Join(stagingDir, "sub"))
+	writeTestFile(t, filepath.Join(stagingDir, "a.txt"), "alpha")
+	writeTestFile(t, filepath.Join(stagingDir, "sub", "b.txt"), "beta")
+
+	if err := promoteStaging(stagingDir, parent); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Files should be in parent
+	assertFileContent(t, filepath.Join(parent, "a.txt"), "alpha")
+	assertFileContent(t, filepath.Join(parent, "sub", "b.txt"), "beta")
+
+	// Staging dir should be gone
+	assertNotExists(t, stagingDir)
+}
+
+// --- New tests for applyExcludes and filterByInclude ---
+
+func TestApplyExcludes(t *testing.T) {
+	dir := t.TempDir()
+	writeTestFile(t, filepath.Join(dir, "keep.yaml"), "keep")
+	writeTestFile(t, filepath.Join(dir, "remove.tmp"), "remove")
+	writeTestFile(t, filepath.Join(dir, "also-keep.txt"), "keep")
+
+	if err := applyExcludes(dir, []string{"*.tmp"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	assertFileContent(t, filepath.Join(dir, "keep.yaml"), "keep")
+	assertFileContent(t, filepath.Join(dir, "also-keep.txt"), "keep")
+	assertNotExists(t, filepath.Join(dir, "remove.tmp"))
+}
+
+func TestApplyExcludes_DoublestarPattern(t *testing.T) {
+	dir := t.TempDir()
+	mkdirAll(t, filepath.Join(dir, "sub", "deep"))
+	writeTestFile(t, filepath.Join(dir, "top.tmp"), "remove")
+	writeTestFile(t, filepath.Join(dir, "sub", "mid.tmp"), "remove")
+	writeTestFile(t, filepath.Join(dir, "sub", "deep", "bottom.tmp"), "remove")
+	writeTestFile(t, filepath.Join(dir, "sub", "keep.yaml"), "keep")
+
+	if err := applyExcludes(dir, []string{"**/*.tmp"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	assertNotExists(t, filepath.Join(dir, "top.tmp"))
+	assertNotExists(t, filepath.Join(dir, "sub", "mid.tmp"))
+	assertNotExists(t, filepath.Join(dir, "sub", "deep", "bottom.tmp"))
+	assertFileContent(t, filepath.Join(dir, "sub", "keep.yaml"), "keep")
+}
+
+func TestApplyExcludes_CleansEmptyDirs(t *testing.T) {
+	dir := t.TempDir()
+	mkdirAll(t, filepath.Join(dir, "empty-after", "nested"))
+	writeTestFile(t, filepath.Join(dir, "empty-after", "nested", "file.tmp"), "remove")
+	writeTestFile(t, filepath.Join(dir, "keep.yaml"), "keep")
+
+	if err := applyExcludes(dir, []string{"**/*.tmp"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	assertNotExists(t, filepath.Join(dir, "empty-after", "nested", "file.tmp"))
+	assertNotExists(t, filepath.Join(dir, "empty-after", "nested"))
+	assertNotExists(t, filepath.Join(dir, "empty-after"))
+	assertFileContent(t, filepath.Join(dir, "keep.yaml"), "keep")
+}
+
+func TestFilterByInclude(t *testing.T) {
+	baseDir := "/base"
+	pipelines := []*api.Pipeline{
+		{Dir: "/base/app1"},
+		{Dir: "/base/app2"},
+		{Dir: "/base/app3"},
+		{Dir: "/base"},
+	}
+
+	filtered := filterByInclude(pipelines, []string{"app1", "app3"}, baseDir)
+
+	if len(filtered) != 3 {
+		t.Fatalf("expected 3 pipelines (app1, app3, root), got %d", len(filtered))
+	}
+
+	dirs := make([]string, len(filtered))
+	for i, p := range filtered {
+		dirs[i] = p.Dir
+	}
+	for _, expected := range []string{"/base/app1", "/base/app3", "/base"} {
+		found := false
+		for _, d := range dirs {
+			if d == expected {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("expected pipeline dir %q in filtered result", expected)
+		}
+	}
+}
+
+func TestFilterByInclude_EmptyInclude(t *testing.T) {
+	pipelines := []*api.Pipeline{
+		{Dir: "/base/app1"},
+		{Dir: "/base/app2"},
+	}
+
+	filtered := filterByInclude(pipelines, nil, "/base")
+
+	if len(filtered) != 2 {
+		t.Fatalf("expected 2 pipelines (empty include = keep all), got %d", len(filtered))
+	}
+}
+
+func TestRunStep_WithExclude(t *testing.T) {
+	// Create a source directory with files
+	sourceDir := t.TempDir()
+	writeTestFile(t, filepath.Join(sourceDir, "app.yaml"), "kind: Deployment")
+	writeTestFile(t, filepath.Join(sourceDir, "build.tmp"), "build artifact")
+	writeTestFile(t, filepath.Join(sourceDir, "secret.env"), "PASSWORD=x")
+
+	workDir := t.TempDir()
+
+	pipeline := &api.Pipeline{
+		Dir: sourceDir,
+		Pipeline: []api.StepConfig{
+			{
+				Name:     "render",
+				Type:     api.StepTypeTemplate,
+				Source:   api.Sources{{File: "."}},
+				Template: &api.TemplateConfig{Files: api.FileFilter{Include: []string{"*.yaml"}}},
+				Exclude:  []string{"*.tmp", "*.env"},
+			},
+		},
+	}
+
+	if err := RunPipeline(pipeline, nil, workDir, true); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// app.yaml should remain
+	assertFileContent(t, filepath.Join(workDir, "app.yaml"), "kind: Deployment")
+	// Excluded files should be removed
+	assertNotExists(t, filepath.Join(workDir, "build.tmp"))
+	assertNotExists(t, filepath.Join(workDir, "secret.env"))
 }

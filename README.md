@@ -5,7 +5,7 @@
 <h1 align="center">Many Templates</h1>
 
 <p align="center">
-  A swiss army-knife for Kubernetes manifests &mdash; multi-stage pipelines for fetching, processing, and rendering.
+  A swiss army knife for Kubernetes manifests &mdash; multi-stage pipelines for fetching, processing, and rendering.
 </p>
 
 <p align="center">
@@ -18,32 +18,34 @@
 
 ---
 
-`many` discovers `.many.yaml` pipeline definitions in a directory tree and executes them in-place.
+`many` is a GitOps tool to process [Kubernetes](https://kubernetes.io/) manifests from many sources in many formats.
+
+Sources can live locally, in an OCI registry, behind an HTTPS URL, or in an
+[OCM](https://ocm.software/) component --- `many` fetches and processes them in a pipeline.
+
+`many` discovers `.many.yaml` pipeline definitions in a directory tree, executes them and writes the results to a output
+directory.
+
 Each pipeline composes steps --- **Go templating** (with [Sprig](https://masterminds.github.io/sprig/)),
 **Kustomize** builds, **Helm** renders, **file generation**, and **YAML splitting** --- to turn a
 template repository into ready-to-apply Kubernetes manifests.
 
-Sources can live locally, in an OCI registry, behind an HTTPS URL, or in an
-[OCM](https://ocm.software/) component --- `many` fetches and overlays them
-transparently before running the pipeline.
+`many` can fan out outputs to many instances, check the [examples](#examples).
 
 <!-- TOC -->
   * [Installation](#installation)
-  * [By Example](#by-example)
-    * [1 --- Render and Split a Kustomization](#1----render-and-split-a-kustomization)
-    * [2 --- Pull Templates from an OCI Registry](#2----pull-templates-from-an-oci-registry)
-    * [3 --- Compose Multiple Sources](#3----compose-multiple-sources)
-    * [4 --- Patch with Generate](#4----patch-with-generate)
-    * [5 --- Helm Chart Rendering](#5----helm-chart-rendering)
-    * [6 --- Multi-Instance Deployment](#6----multi-instance-deployment)
-  * [The `pull` Subcommand](#the-pull-subcommand)
+  * [Examples](#examples)
+    * [1 --- Fetch and Render Go Templates](#1-----fetch-and-render-go-templates)
+    * [2 --- Fetch, Split, and Kustomize](#2-----fetch-split-and-kustomize)
+    * [3 --- Instances](#3-----instances)
   * [CLI Reference](#cli-reference)
     * [Discovery Mode (default)](#discovery-mode-default)
     * [Single Pipeline Mode](#single-pipeline-mode)
     * [Instances Mode](#instances-mode)
   * [Pipeline Steps](#pipeline-steps)
     * [`template`](#template)
-    * [`kustomize`](#kustomize)
+    * [`kustomize-build`](#kustomize-build)
+    * [`kustomize-create`](#kustomize-create)
     * [`helm`](#helm)
     * [`generate`](#generate)
     * [`split`](#split)
@@ -69,266 +71,134 @@ Or build from source:
 make build   # produces ./many
 ```
 
-## By Example
+## Examples
 
-### 1 --- Render and Split a Kustomization
+### 1 --- Fetch and Render Go Templates
 
-The most common pattern: template variables into Kustomize inputs, build, and split
-the resulting multi-document YAML into individual files.
-
-```
-cert-manager/
-├── .many.yaml
-├── kustomization.yaml      # contains {{ .namespace }}
-├── values.yaml             # contains {{ .domain }}
-└── externalsecret.yaml
-```
+[`examples/source-tarball/`](examples/source-tarball/) fetches a tarball from a URL
+and renders Go templates from its contents.
 
 ```yaml
-# cert-manager/.many.yaml
-context:
-  namespace: cert-manager
-  domain: "example.com"
-
-pipeline:
-  - name: render-templates
-    type: template
-    template:
-      files:
-        include: ["**/*.yaml"]
-        exclude: [".many.yaml"]
-
-  - name: build
-    type: kustomize
-    kustomize:
-      enableHelm: true
-
-  - name: split-output
-    type: split
-    split:
-      input: build
-      by: resource
-      outputDir: manifests/
-```
-
-```bash
-many -input ./cert-manager -output-directory ./output
-```
-
-The source tree is copied to `./output`, templates are rendered, `kustomize build`
-runs, the output is split into one file per resource under `manifests/`, and
-`.many.yaml` is removed.
-
-### 2 --- Pull Templates from an OCI Registry
-
-Instead of keeping templates in the local tree, pull them from an OCI image.
-The `source` block fetches and overlays the image contents before the pipeline runs.
-
-```yaml
-# .many.yaml
-source:
-  oci: ghcr.io/myorg/cert-manager-templates:v1.0.0
-
-context:
-  namespace: cert-manager
-
-pipeline:
-  - name: render-templates
-    type: template
-    template:
-      files:
-        include: ["**/*.yaml"]
-        exclude: [".many.yaml"]
-
-  - name: build
-    type: kustomize
-
-  - name: split-output
-    type: split
-    split:
-      input: build
-      by: resource
-      outputDir: manifests/
-```
-
-Sources can also use `https` (tarballs or single files), `file` (local paths),
-or `ocm` (OCM component versions). See [Sources](#sources).
-
-### 3 --- Compose Multiple Sources
-
-A pipeline can overlay multiple sources. They are applied in order, so later
-sources overwrite earlier ones --- perfect for base + patches workflows.
-
-```yaml
-source:
-  - oci: ghcr.io/myorg/base-manifests:v2.0.0
-  - oci: ghcr.io/myorg/env-patches:v1.1.0
-    path: patches/          # overlay into a subdirectory
-  - file: ./local-overrides
-
-pipeline:
-  - name: render
-    type: template
-    template:
-      files:
-        include: ["**/*.yaml"]
-```
-
-Sources can also be attached to individual steps rather than the whole pipeline:
-
-```yaml
+# examples/source-tarball/.many.yaml
 pipeline:
   - name: fetch-and-render
     type: template
     source:
+      # renovate: datasource=github-tags depName=myorg/configs
       https: https://github.com/myorg/configs/archive/main.tar.gz
+      sha256: ""
     template:
       files:
         include: ["**/*.yaml"]
 ```
 
-### 4 --- Patch with Generate
+The `source` on the step fetches files into the working directory before the step
+executes. Here an HTTPS tarball is downloaded and extracted, then all YAML files
+are rendered as Go templates with [Sprig](https://masterminds.github.io/sprig/)
+functions.
 
-The `generate` step creates files from inline Go templates. Use it to synthesize
-Kustomize patches, ConfigMaps, or any manifest from context data alone --- no
-placeholder files needed.
+**SHA-256 verification** --- the `sha256` field pins a source to a known checksum.
+When set (e.g. `sha256: "b74106509bbce..."`) `many` verifies the download matches
+before proceeding. An empty string disables verification, useful during development.
+
+**Renovate integration** --- the `# renovate:` comment is a
+[Renovate](https://docs.renovatebot.com/) annotation. Renovate parses it to
+auto-create pull requests when a new version is available, updating both the URL
+and the `sha256` checksum.
+
+```bash
+many -input examples/source-tarball -output-directory ./output
+```
+
+### 2 --- Fetch, Split, and Kustomize
+
+[`examples/kubevirt/`](examples/kubevirt/) downloads upstream release YAML files,
+splits each into individual resources, and generates a kustomization.
 
 ```yaml
-context:
-  app_name: my-api
-  replicas: 3
-  domain: "api.example.com"
-
+# examples/kubevirt/source/.many.yaml (abbreviated --- 4 similar split steps)
 pipeline:
-  - name: gen-patch
-    type: generate
-    generate:
-      output: patches/replicas.yaml
-      template: |
-        apiVersion: apps/v1
-        kind: Deployment
-        metadata:
-          name: {{ .app_name }}
-        spec:
-          replicas: {{ .replicas }}
-
-  - name: gen-ingress
-    type: generate
-    generate:
-      output: ingress.yaml
-      template: |
-        apiVersion: networking.k8s.io/v1
-        kind: Ingress
-        metadata:
-          name: {{ .app_name }}
-        spec:
-          rules:
-            - host: {{ .domain }}
-              http:
-                paths:
-                  - path: /
-                    pathType: Prefix
-                    backend:
-                      service:
-                        name: {{ .app_name }}
-                        port:
-                          number: 8080
-
-  - name: build
-    type: kustomize
-
-  - name: split
+  - name: split-kubevirt-operator
     type: split
+    source:
+      # renovate: datasource=github-releases depName=kubevirt/kubevirt
+      - https: "https://github.com/kubevirt/kubevirt/releases/download/v1.7.2/kubevirt-operator.yaml"
+        sha256: "b74106509bbce107a01b228083b4030890b2278cf918fe5c2cf380fdc2a27aef"
+        temporary: true
+        path: build/
     split:
-      input: build
+      input: build/kubevirt-operator.yaml
       by: resource
-      outputDir: manifests/
+      outputDir: manifests/operator/
+    exclude:
+      - "build/**"
+
+  # ... split-kubevirt-cr, split-cdi-operator, split-cdi-cr ...
+
+  - name: create-kustomization
+    type: kustomize-create
+    kustomize-create:
+      autodetect: true
+      recursive: true
+      dir: manifests/
+    exclude:
+      - "kustomization.yaml"
 ```
 
-### 5 --- Helm Chart Rendering
-
-For Helm-based services, use the `helm` step to run `helm template` and pipe the
-output into a split step.
-
-```yaml
-context:
-  domain: "example.com"
-
-pipeline:
-  - name: render-values
-    type: template
-    template:
-      files:
-        include: ["values.yaml"]
-
-  - name: render-chart
-    type: helm
-    helm:
-      chart: ./charts/my-app
-      releaseName: my-app
-      namespace: my-app
-      valuesFiles: ["values.yaml"]
-      set:
-        ingress.host: "app.example.com"
-
-  - name: split
-    type: split
-    split:
-      input: render-chart
-      by: kind-dir
-      outputDir: manifests/
-```
-
-### 6 --- Multi-Instance Deployment
-
-The real power shows in **instances mode**: render the same template tree for
-multiple environments, domains, or tenants in a single run.
-
-The [`examples/many-sites/`](examples/many-sites/) directory demonstrates this
-with two domains that each select a different subset of services from a shared pool:
+Each `source` fetches a release YAML into `build/`. The `split` step breaks it
+into one file per resource under `manifests/`, and `temporary: true` combined with
+`exclude` cleans up the intermediate `build/` directory. The final `kustomize-create`
+step generates a `kustomization.yaml` referencing all discovered manifests:
 
 ```
-examples/many-sites/
-├── instances.yaml          # defines fediverse + development instances
-├── context.yaml            # shared config (subdomains, storage, OIDC, ...)
-└── services/
-    ├── dex/                # Kustomize + Helm, templated values
-    ├── lldap/
-    ├── mastodon/
-    ├── matrix/
-    ├── forgejo/
-    ├── harbor/
+output/manifests/
+├── kustomization.yaml
+├── cdi/
+│   ├── cdi-cdi.yaml
+│   ├── deployment-cdi-operator.yaml
+│   └── ...
+└── operator/
+    ├── kubevirt-kubevirt.yaml
+    ├── deployment-virt-operator.yaml
     └── ...
 ```
 
-**instances.yaml** --- each instance picks services with `include` and sets
-per-instance context:
+```bash
+many -input examples/kubevirt/source -output-directory ./output
+```
+
+### 3 --- Instances
+
+[`examples/many-sites/`](examples/many-sites/) renders the same services for
+multiple environments. Each instance selects a subset of services and provides
+per-instance context values.
+
+**instances.yaml** defines two instances with different service selections:
 
 ```yaml
 instances:
   - name: fediverse
+    input: "services"
     output: fediverse.example/
     include: [dex, eso, lldap, mastodon, matrix, mobilizon, pixelfed]
     context:
       domain: "fediverse.example"
       siteName: "fediverse"
-      services: [dex, eso, lldap, mastodon, matrix, mobilizon, pixelfed]
 
   - name: development
+    input: "services"
     output: development.example/
     include: [dex, eso, lldap, forgejo, harbor, woodpecker]
     context:
       domain: "development.example"
       siteName: "development"
-      services: [dex, eso, lldap, forgejo, harbor, woodpecker]
 ```
 
-**context.yaml** --- shared configuration. Values can reference other context
-keys via Go templates (single-pass interpolation):
+**context.yaml** provides shared configuration. String values can reference other
+context keys via Go template interpolation (single pass after merge):
 
 ```yaml
 subdomains:
-  dex: "auth"
   mastodon: "social"
   forgejo: "git"
   # ...
@@ -340,7 +210,8 @@ eso:
   remotePathPrefix: "site/{{ .siteName }}"
 ```
 
-**Each service** has a `.many.yaml` with the template-build-split pattern:
+Services follow two patterns. **Helm-based services** (dex, mastodon, ...) use
+`kustomize-build` with Helm and split the output:
 
 ```yaml
 # services/dex/.many.yaml
@@ -350,29 +221,59 @@ context:
 pipeline:
   - name: render-templates
     type: template
+    source:
+      - file: kustomization.yaml
+      - file: values.yaml
+      - file: externalsecret.yaml
     template:
       files:
         include: ["**/*.yaml"]
-        exclude: [".many.yaml"]
 
   - name: build
-    type: kustomize
-    kustomize:
+    type: kustomize-build
+    kustomize-build:
       enableHelm: true
+      outputFile: kustomize-output.yaml
 
   - name: split-output
     type: split
+    exclude: ["kustomize-output.yaml"]
     split:
-      input: build
+      input: kustomize-output.yaml
       by: resource
       outputDir: manifests/
 ```
 
-Run it:
+**Raw-manifest services** (lldap, woodpecker, ...) render templates and generate a
+kustomization:
+
+```yaml
+# services/lldap/.many.yaml
+pipeline:
+  - name: render-templates
+    type: template
+    source:
+      file: manifests/
+      path: manifests/
+    template:
+      files:
+        include: ["**/*.yaml"]
+
+  - name: create-kustomization
+    type: kustomize-create
+    kustomize-create:
+      autodetect: true
+      recursive: true
+      namespace: lldap
+```
+
+Context is merged in layers --- global (`-context-file`) → instance
+(`context` in instances.yaml) → pipeline-local (`context` in `.many.yaml`) ---
+with later layers overriding earlier ones via deep merge.
 
 ```bash
 many \
-  -input examples/many-sites/services \
+  -input examples/many-sites \
   -output-directory output \
   -instances examples/many-sites/instances.yaml \
   -context-file examples/many-sites/context.yaml
@@ -383,45 +284,16 @@ Output:
 ```
 output/
 ├── fediverse.example/
-│   ├── dex/manifests/...
-│   ├── mastodon/manifests/...
+│   ├── dex/
+│   │   ├── kustomization.yaml
+│   │   └── manifests/...
+│   ├── mastodon/...
 │   └── ...
 └── development.example/
-    ├── dex/manifests/...
-    ├── forgejo/manifests/...
+    ├── dex/...
+    ├── forgejo/...
     └── ...
 ```
-
-> **Note:** This example demonstrates the tool's usage for a non-trivial project. Whether the
-> resulting manifests provide a working setup is not in scope.
-
-## The `pull` Subcommand
-
-`many pull` fetches a source reference to a local directory without running any pipeline.
-Useful for scripting --- no need to know whether to call `crane`, `curl`, or `ocm` for a
-given URI.
-
-```bash
-many pull <ref> <dir>
-```
-
-Examples:
-
-```bash
-# Local path
-many pull ./examples/many-sites/services /tmp/local-copy
-
-# OCI image
-many pull oci://ghcr.io/myorg/templates:latest /tmp/oci-pull
-
-# HTTPS tarball
-many pull https://github.com/myorg/templates/archive/main.tar.gz /tmp/https-pull
-
-# OCM component
-many pull ocm://ghcr.io/myorg/ocm//github.com/myorg/templates:v1.0.0 /tmp/ocm-pull
-```
-
-Prints nothing on success, exits non-zero with an error message on failure.
 
 ## CLI Reference
 
@@ -434,6 +306,8 @@ Prints nothing on success, exits non-zero with an error message on failure.
 | `-max-depth`                  | Max directory recursion depth (`-1` = unlimited, `0` = root only) | `-1`     |
 | `-processing`                 | Single `.many.yaml` to run (skips directory discovery)            | none     |
 | `-instances`                  | Instances YAML file for matrix mode                               | none     |
+| `-env-file`                   | Load environment variables from the specified file                | none     |
+| `-no-sha256-update`           | Disable sha256 writeback to `.many.yaml` files                   | `false`  |
 | `-log-level`                  | `debug`, `info`, `warn`, `error`                                  | `info`   |
 | `-logging-type`               | `json`, `text`, `tint`                                            | `tint`   |
 | `-version`                    | Print version and exit                                            |          |
@@ -482,8 +356,8 @@ instances:
   - name: prod-east
     output: prod-east/          # required --- subdirectory of -output-directory
     input: ""                   # optional --- subdirectory of -input (or remote URI)
-    include: [api, frontend]    # optional --- filter immediate subdirectories (empty = all)
-    context:                    # optional --- merged on top of global context
+    include: [ api, frontend ]    # optional --- filter immediate subdirectories (empty = all)
+    context: # optional --- merged on top of global context
       region: us-east-1
       replicas: 3
 ```
@@ -496,8 +370,7 @@ if any instance failed.
 ## Pipeline Steps
 
 Each step has a `name` (unique within the pipeline) and a `type`. Steps execute
-sequentially. Steps that produce YAML output (`kustomize`, `helm`) store it by
-name so later steps (e.g. `split`) can reference it.
+sequentially.
 
 ### `template`
 
@@ -509,8 +382,8 @@ with [Sprig](https://masterminds.github.io/sprig/) functions.
   type: template
   template:
     files:
-      include: ["**/*.yaml"]
-      exclude: ["kustomization.yaml"]
+      include: [ "**/*.yaml" ]
+      exclude: [ "kustomization.yaml" ]
 ```
 
 | Field           | Description                         | Default    |
@@ -521,23 +394,64 @@ with [Sprig](https://masterminds.github.io/sprig/) functions.
 Globs are relative to the pipeline directory and support `**` for recursive matching
 via [doublestar](https://github.com/bmatcuk/doublestar).
 
-### `kustomize`
+### `kustomize-build`
 
 Runs `kustomize build` and captures the multi-document YAML output. Requires
 `kustomize` on `PATH`.
 
 ```yaml
 - name: build
-  type: kustomize
-  kustomize:
-    dir: "."
+  type: kustomize-build
+  kustomize-build:
     enableHelm: true
+    outputFile: kustomize-output.yaml
 ```
 
 | Field        | Description                               | Default |
 |--------------|-------------------------------------------|---------|
 | `dir`        | Directory containing `kustomization.yaml` | `"."`   |
 | `enableHelm` | Pass `--enable-helm` to kustomize         | `false` |
+| `outputFile` | File to write the build output to         | none    |
+
+### `kustomize-create`
+
+Runs `kustomize create` to auto-generate a `kustomization.yaml` file. Useful when
+pulling sources from OCI/HTTPS and you want to avoid hand-writing the kustomization
+file. Requires `kustomize` on `PATH`.
+
+```yaml
+- name: create-kustomization
+  type: kustomize-create
+  kustomize-create:
+    dir: "."
+    autodetect: true
+    recursive: true
+    resources:
+      - deployment.yaml
+      - ../base
+    namespace: "staging"
+    nameprefix: "acme-"
+    namesuffix: "-v2"
+    annotations:
+      app.kubernetes.io/managed-by: many
+    labels:
+      env: production
+```
+
+| Field         | Description                                       | Default |
+|---------------|---------------------------------------------------|---------|
+| `dir`         | Directory in which to create `kustomization.yaml` | `"."`   |
+| `autodetect`  | Pass `--autodetect` to discover resources         | `false` |
+| `recursive`   | Pass `--recursive` (requires `autodetect`)        | `false` |
+| `resources`   | Explicit list of resources to include             | `[]`    |
+| `namespace`   | Set namespace in the generated kustomization      | none    |
+| `nameprefix`  | Set name prefix                                   | none    |
+| `namesuffix`  | Set name suffix                                   | none    |
+| `annotations` | Map of annotations to add                         | `{}`    |
+| `labels`      | Map of labels to add                              | `{}`    |
+
+At least one of `autodetect` or `resources` must be set. `recursive` requires
+`autodetect` to be enabled.
 
 ### `helm`
 
@@ -550,18 +464,19 @@ Runs `helm template` to render a chart. Requires `helm` on `PATH`.
     chart: ./charts/my-app
     releaseName: my-app
     namespace: default
-    valuesFiles: ["values.yaml"]
+    valuesFiles: [ "values.yaml" ]
     set:
       image.tag: "v1.2.3"
 ```
 
-| Field         | Description                               | Default     |
-|---------------|-------------------------------------------|-------------|
+| Field         | Description                                | Default     |
+|---------------|--------------------------------------------|-------------|
 | `chart`       | Path to chart directory or chart reference | required    |
-| `releaseName` | Helm release name                         | required    |
-| `namespace`   | Target namespace                          | `"default"` |
-| `valuesFiles` | List of values files                      | `[]`        |
-| `set`         | Map of `--set` overrides                  | `{}`        |
+| `releaseName` | Helm release name                          | required    |
+| `namespace`   | Target namespace                           | `"default"` |
+| `valuesFiles` | List of values files                       | `[]`        |
+| `set`         | Map of `--set` overrides                   | `{}`        |
+| `outputFile`  | File to write the rendered output to       | none        |
 
 ### `generate`
 
@@ -592,21 +507,20 @@ Parent directories are created automatically.
 
 ### `split`
 
-Takes a multi-document YAML stream from a previous `kustomize` or `helm` step and
-splits it into individual files.
+Takes a multi-document YAML file and splits it into individual files.
 
 ```yaml
 - name: split-manifests
   type: split
   split:
-    input: build
-    by: kind
+    input: kustomize-output.yaml
+    by: resource
     outputDir: manifests/
 ```
 
 | Field               | Description                                              | Default  |
 |---------------------|----------------------------------------------------------|----------|
-| `input`             | Name of a previous step whose output to split            | required |
+| `input`             | File path to the multi-document YAML to split            | required |
 | `by`                | Splitting strategy (see below)                           | `"kind"` |
 | `outputDir`         | Directory to write split files into                      | `"."`    |
 | `fileNameTemplate`  | Go template for file paths (only with `custom` strategy) | ---      |
@@ -614,44 +528,58 @@ splits it into individual files.
 
 **Splitting strategies:**
 
-| Strategy    | Layout                                                                                             |
-|-------------|----------------------------------------------------------------------------------------------------|
-| `kind`      | One file per Kind (`deployment.yaml`, `service.yaml`). Multiple resources of the same Kind share a file. |
-| `resource`  | One file per resource (`deployment-api.yaml`, `service-api.yaml`).                                 |
-| `group`     | Directories per API group (`apps/deployment-api.yaml`, `core/service-api.yaml`).                   |
-| `kind-dir`  | Directories per Kind, pluralized (`deployments/api.yaml`, `services/api.yaml`).                    |
-| `custom`    | File paths from a Go template: `fileNameTemplate: "{{ .metadata.namespace }}/{{ .kind | lower }}-{{ .metadata.name }}.yaml"` |
+| Strategy   | Layout                                                                                                   |
+|------------|----------------------------------------------------------------------------------------------------------|
+| `kind`     | One file per Kind (`deployment.yaml`, `service.yaml`). Multiple resources of the same Kind share a file. |
+| `resource` | One file per resource (`deployment-api.yaml`, `service-api.yaml`).                                       |
+| `group`    | Directories per API group (`apps/deployment-api.yaml`, `core/service-api.yaml`).                         |
+| `kind-dir` | Directories per Kind, pluralized (`deployments/api.yaml`, `services/api.yaml`).                          |
+| `custom`   | File paths from a Go template: `fileNameTemplate: "{{ .metadata.namespace }}/{{ .kind                    | lower }}-{{ .metadata.name }}.yaml"` |
 
 ## Sources
 
-Sources fetch remote or local content and overlay it into the pipeline directory
-before steps run. A source can be a single entry or a list (applied in order).
+Each step can declare a `source` to fetch files into the working directory before
+execution. A source is a single entry or a list of entries, applied in order:
 
 ```yaml
-# Single source
 source:
-  oci: ghcr.io/myorg/templates:v1.0.0
+  https: https://example.com/archive.tar.gz
+  sha256: "abc123..."
+  path: subdir/
+```
 
-# Multiple sources (overlaid in order)
+```yaml
 source:
-  - oci: ghcr.io/myorg/base:v2.0.0
-  - file: ./local-patches
+  - oci: ghcr.io/myorg/manifests:v1.0.0
+  - file: ./local-overrides
     path: patches/
 ```
 
-| Field       | Description                                           |
-|-------------|-------------------------------------------------------|
-| `oci`       | OCI image reference (requires `crane` on `PATH`)      |
-| `https`     | URL to a `.tar.gz`/`.tgz` tarball or single file      |
-| `file`      | Local filesystem path                                 |
-| `ocm`       | OCM component reference (requires `ocm` on `PATH`)   |
-| `path`      | Target subdirectory within the pipeline directory     |
-| `recursive` | Download referenced sub-components (OCM only)         |
+| Scheme  | Description                                        | Example                                  |
+|---------|----------------------------------------------------|------------------------------------------|
+| `file`  | Local file or directory (relative to `.many.yaml`) | `file: ../shared/postgres.yaml`          |
+| `https` | URL to a single file or tarball (auto-extracted)   | `https: https://example.com/v1.tar.gz`   |
+| `oci`   | OCI image reference                                | `oci: ghcr.io/myorg/config:v1`          |
+| `ocm`   | OCM component version                              | `ocm: github.com/myorg/component//res`  |
+| `helm`  | Helm chart (requires `repo`)                       | `helm: my-chart`                         |
 
-Exactly one of `oci`, `https`, `file`, or `ocm` must be set per entry.
+| Option      | Description                                                  |
+|-------------|--------------------------------------------------------------|
+| `path`      | Target subdirectory to place fetched files into              |
+| `sha256`    | SHA-256 checksum for `https` sources (see below)             |
+| `temporary` | Remove fetched files after the step completes                |
+| `recursive` | Recursively resolve OCM references (OCM only)                |
+| `repo`      | Helm chart repository URL (Helm only)                        |
+| `version`   | Helm chart version (Helm only)                               |
 
-Sources can also be attached to individual steps via the step-level `source` field,
-using the same format.
+**SHA-256 verification** --- when `sha256` is set to a hex digest, `many` verifies
+the downloaded content matches before proceeding. On the first run you can leave
+it empty (`sha256: ""`) to disable verification; `many` computes the actual
+checksum and writes it back to the `.many.yaml` file so you can pin it. Use
+`-no-sha256-update` to disable this writeback. Once pinned, any mismatch
+(e.g. an upstream release change) fails the pipeline. Combined with a
+`# renovate:` comment, Renovate updates both the URL and the checksum
+automatically.
 
 ## Context
 
@@ -722,8 +650,9 @@ After interpolation, `forgejo_url` becomes `https://forgejo.example.com`.
 1. The source tree is copied to the output directory.
 2. `.many.yaml` files are discovered, sorted by directory depth (parents first).
 3. Each pipeline executes in-place within the output tree.
-4. `template` steps modify files in-place. `kustomize`/`helm` steps produce YAML
-   in memory. `split` steps write that YAML to files.
+4. `template` steps modify files in-place. `kustomize-build`/`helm` steps write their
+   output to a file (`outputFile`). `split` steps read a multi-document YAML file and
+   write individual files.
 5. `.many.yaml` files and the context file are removed from the output.
 
 A failing step aborts its pipeline. Other pipelines continue. The exit code is
@@ -731,6 +660,12 @@ non-zero if any pipeline failed.
 
 ## Environment Variables
 
-If a `.env` file exists in the working directory, it is loaded automatically
-via [godotenv](https://github.com/joho/godotenv). These are available to
-`kustomize` and `helm` steps via environment inheritance.
+Use `-env-file` to load environment variables from a file
+via [godotenv](https://github.com/joho/godotenv):
+
+```bash
+many -env-file .env -input ./infra -output-directory ./output
+```
+
+Loaded variables are available to `kustomize-build`, `kustomize-create`, and
+`helm` steps via environment inheritance.

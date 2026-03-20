@@ -1,7 +1,27 @@
+context:
+  pg:
+    appName: pixelfed
+    image: "postgres:16-alpine"
+    dbName: pixelfed
+    dbUser: pixelfed
+    secretName: pixelfed-secrets
+    secretKey: DB_PASSWORD
+
 pipeline:
   - name: render-templates
     type: template
+    source:
+      - file: manifests/
+        path: manifests/
+      - file: ../../shared/postgres.yaml
+        path: manifests/
     template:
       files:
         include: ["**/*.yaml"]
-        exclude: [".many.yaml"]
+
+  - name: create-kustomization
+    type: kustomize-create
+    kustomize-create:
+      autodetect: true
+      recursive: true
+      namespace: pixelfed

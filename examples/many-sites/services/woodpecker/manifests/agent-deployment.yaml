@@ -2,7 +2,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: woodpecker-agent
-  namespace: woodpecker
   labels:
     app.kubernetes.io/name: woodpecker
     app.kubernetes.io/component: agent
@@ -21,7 +20,8 @@ spec:
       serviceAccountName: woodpecker-agent
       containers:
         - name: woodpecker-agent
-          image: woodpeckerci/woodpecker-agent:latest
+          # renovate: datasource=docker depName=woodpeckerci/woodpecker-agent
+          image: woodpeckerci/woodpecker-agent:v3.13.0
           env:
             - name: WOODPECKER_SERVER
               value: "woodpecker-server:9000"

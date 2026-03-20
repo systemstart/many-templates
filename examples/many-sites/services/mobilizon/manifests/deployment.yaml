@@ -2,7 +2,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: mobilizon
-  namespace: mobilizon
   labels:
     app.kubernetes.io/name: mobilizon
 spec:
@@ -17,7 +16,8 @@ spec:
     spec:
       containers:
         - name: mobilizon
-          image: framasoft/mobilizon:latest
+          # renovate: datasource=docker depName=framasoft/mobilizon
+          image: framasoft/mobilizon:5.2.2
           ports:
             - name: http
               containerPort: 4000

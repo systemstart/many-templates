@@ -4,19 +4,25 @@ context:
 pipeline:
   - name: render-templates
     type: template
+    source:
+      - file: kustomization.yaml
+      - file: values.yaml
+      - file: externalsecret.yaml
+      - file: element-web.yaml
     template:
       files:
         include: ["**/*.yaml"]
-        exclude: [".many.yaml"]
 
   - name: build
-    type: kustomize
-    kustomize:
+    type: kustomize-build
+    kustomize-build:
       enableHelm: true
+      outputFile: kustomize-output.yaml
 
   - name: split-output
     type: split
+    exclude: ["kustomize-output.yaml"]
     split:
-      input: build
+      input: kustomize-output.yaml
       by: resource
       outputDir: manifests/

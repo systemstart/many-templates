@@ -1,7 +1,16 @@
 pipeline:
   - name: render-templates
     type: template
+    source:
+      file: manifests/
+      path: manifests/
     template:
       files:
         include: ["**/*.yaml"]
-        exclude: [".many.yaml"]
+
+  - name: create-kustomization
+    type: kustomize-create
+    kustomize-create:
+      autodetect: true
+      recursive: true
+      namespace: woodpecker

@@ -2,7 +2,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: forgejo
-  namespace: forgejo
   labels:
     app.kubernetes.io/name: forgejo
 spec:
@@ -17,7 +16,8 @@ spec:
     spec:
       containers:
         - name: forgejo
-          image: codeberg/forgejo:latest
+          # renovate: datasource=docker depName=codeberg/forgejo
+          image: codeberg/forgejo:14.0
           ports:
             - name: http
               containerPort: 3000

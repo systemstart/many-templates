@@ -3,16 +3,22 @@ package api
 import (
 	"fmt"
 	"path/filepath"
+	"regexp"
 	"strings"
+
+	"github.com/bmatcuk/doublestar/v4"
 )
 
 var validStepTypes = map[string]bool{
-	StepTypeTemplate:  true,
-	StepTypeKustomize: true,
-	StepTypeHelm:      true,
-	StepTypeSplit:     true,
-	StepTypeGenerate:  true,
+	StepTypeTemplate:        true,
+	StepTypeKustomizeBuild:  true,
+	StepTypeKustomizeCreate: true,
+	StepTypeHelm:            true,
+	StepTypeSplit:           true,
+	StepTypeGenerate:        true,
 }
+
+var sha256Re = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
 var validSplitStrategies = map[string]bool{
 	SplitByKind:     true,
@@ -28,16 +34,11 @@ func (p *Pipeline) Validate() error {
 		return fmt.Errorf("pipeline has no steps")
 	}
 
-	if err := validateSources(p.Source, "pipeline"); err != nil {
-		return err
-	}
-
 	return validateSteps(p.Pipeline)
 }
 
 func validateSteps(steps []StepConfig) error {
 	names := make(map[string]int)
-	outputProducers := make(map[string]bool)
 
 	for i, step := range steps {
 		if step.Name == "" {
@@ -56,34 +57,44 @@ func validateSteps(steps []StepConfig) error {
 			return fmt.Errorf("step %q: unknown type %q", step.Name, step.Type)
 		}
 
-		if err := validateStepConfig(step, outputProducers); err != nil {
+		if err := validateStepConfig(step); err != nil {
 			return fmt.Errorf("step %q: %w", step.Name, err)
 		}
 
-		if step.Type == StepTypeKustomize || step.Type == StepTypeHelm {
-			outputProducers[step.Name] = true
+		if err := validateExcludePatterns(step.Exclude); err != nil {
+			return fmt.Errorf("step %q: %w", step.Name, err)
 		}
 	}
 
 	return nil
 }
 
-func validateStepConfig(step StepConfig, outputProducers map[string]bool) error {
+func validateStepConfig(step StepConfig) error {
 	switch step.Type {
 	case StepTypeTemplate:
 		if step.Template == nil {
 			return fmt.Errorf("template config is required")
 		}
-	case StepTypeKustomize:
-		if step.Kustomize == nil {
-			return fmt.Errorf("kustomize config is required")
-		}
+	case StepTypeKustomizeBuild:
+		return validateKustomizeBuildConfig(step)
+	case StepTypeKustomizeCreate:
+		return validateKustomizeCreateConfig(step)
 	case StepTypeHelm:
 		return validateHelmConfig(step)
 	case StepTypeSplit:
-		return validateSplitConfig(step, outputProducers)
+		return validateSplitConfig(step)
 	case StepTypeGenerate:
 		return validateGenerateConfig(step)
+	}
+	return nil
+}
+
+func validateKustomizeBuildConfig(step StepConfig) error {
+	if step.KustomizeBuild == nil {
+		return fmt.Errorf("kustomize-build config is required")
+	}
+	if step.KustomizeBuild.OutputFile == "" {
+		return fmt.Errorf("kustomize-build.outputFile is required")
 	}
 	return nil
 }
@@ -114,15 +125,12 @@ func validateGenerateConfig(step StepConfig) error {
 	return nil
 }
 
-func validateSplitConfig(step StepConfig, outputProducers map[string]bool) error {
+func validateSplitConfig(step StepConfig) error {
 	if step.Split == nil {
 		return fmt.Errorf("split config is required")
 	}
 	if step.Split.Input == "" {
 		return fmt.Errorf("split.input is required")
-	}
-	if !outputProducers[step.Split.Input] {
-		return fmt.Errorf("split.input %q does not reference an earlier kustomize or helm step", step.Split.Input)
 	}
 	if step.Split.By != "" && !validSplitStrategies[step.Split.By] {
 		valid := make([]string, 0, len(validSplitStrategies))
@@ -137,6 +145,29 @@ func validateSplitConfig(step StepConfig, outputProducers map[string]bool) error
 	return nil
 }
 
+func validateExcludePatterns(patterns []string) error {
+	for i, p := range patterns {
+		if !doublestar.ValidatePattern(p) {
+			return fmt.Errorf("exclude[%d]: invalid glob pattern %q", i, p)
+		}
+	}
+	return nil
+}
+
+func validateKustomizeCreateConfig(step StepConfig) error {
+	if step.KustomizeCreate == nil {
+		return fmt.Errorf("kustomize-create config is required")
+	}
+	cfg := step.KustomizeCreate
+	if !cfg.Autodetect && len(cfg.Resources) == 0 {
+		return fmt.Errorf("kustomize-create: at least one of autodetect or resources must be set")
+	}
+	if cfg.Recursive && !cfg.Autodetect {
+		return fmt.Errorf("kustomize-create: recursive requires autodetect to be enabled")
+	}
+	return nil
+}
+
 func validateSources(sources Sources, label string) error {
 	for i, entry := range sources {
 		if err := validateSourceEntry(entry); err != nil {
@@ -147,19 +178,58 @@ func validateSources(sources Sources, label string) error {
 }
 
 func validateSourceEntry(entry SourceEntry) error {
-	if entry.SchemeCount() == 0 {
-		return fmt.Errorf("exactly one of oci, https, file, or ocm must be set")
+	if err := validateSourceScheme(entry); err != nil {
+		return err
 	}
-	if entry.SchemeCount() > 1 {
-		return fmt.Errorf("exactly one of oci, https, file, or ocm must be set, got %d", entry.SchemeCount())
+	if err := validateHelmFields(entry); err != nil {
+		return err
 	}
-	if entry.Recursive && entry.OCM == "" {
-		return fmt.Errorf("recursive is only valid when ocm is set")
+	if err := validateSHA256Field(entry); err != nil {
+		return err
 	}
 	if entry.Path != "" {
 		if err := validateSourcePath(entry.Path); err != nil {
 			return fmt.Errorf("invalid path: %w", err)
 		}
+	}
+	return nil
+}
+
+func validateSourceScheme(entry SourceEntry) error {
+	if entry.SchemeCount() == 0 {
+		return fmt.Errorf("exactly one of oci, https, file, ocm, or helm must be set")
+	}
+	if entry.SchemeCount() > 1 {
+		return fmt.Errorf("exactly one of oci, https, file, ocm, or helm must be set, got %d", entry.SchemeCount())
+	}
+	if entry.Recursive && entry.OCM == "" {
+		return fmt.Errorf("recursive is only valid when ocm is set")
+	}
+	return nil
+}
+
+func validateHelmFields(entry SourceEntry) error {
+	if entry.Helm != "" && entry.Repo == "" {
+		return fmt.Errorf("repo is required when helm is set")
+	}
+	if entry.Repo != "" && entry.Helm == "" {
+		return fmt.Errorf("repo is only valid when helm is set")
+	}
+	if entry.Version != "" && entry.Helm == "" {
+		return fmt.Errorf("version is only valid when helm is set")
+	}
+	return nil
+}
+
+func validateSHA256Field(entry SourceEntry) error {
+	if entry.SHA256 == "" {
+		return nil
+	}
+	if entry.HTTPS == "" {
+		return fmt.Errorf("sha256 is only supported for https sources")
+	}
+	if !sha256Re.MatchString(entry.SHA256) {
+		return fmt.Errorf("sha256 must be exactly 64 lowercase hex characters")
 	}
 	return nil
 }

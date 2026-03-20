@@ -52,7 +52,7 @@ pkgs.mkShell {
   buildInputs = with pkgs; [
     gnumake
     goPkg
-    (golangci-lint.override { buildGo125Module = buildGo125Module.override { go = goPkg; }; })
+    (golangci-lint.override { buildGo126Module = buildGo125Module.override { go = goPkg; }; })
     goreleaser
     gsemver
     kustomize

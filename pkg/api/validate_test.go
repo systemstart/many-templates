@@ -16,9 +16,9 @@ func TestValidate_ValidPipeline(t *testing.T) {
 				},
 			},
 			{
-				Name:      "build",
-				Type:      StepTypeKustomize,
-				Kustomize: &KustomizeConfig{Dir: "."},
+				Name:           "build",
+				Type:           StepTypeKustomizeBuild,
+				KustomizeBuild: &KustomizeBuildConfig{Dir: ".", OutputFile: "build.yaml"},
 			},
 			{
 				Name: "split",
@@ -108,17 +108,32 @@ func TestValidate_MissingTemplateConfig(t *testing.T) {
 	}
 }
 
-func TestValidate_MissingKustomizeConfig(t *testing.T) {
+func TestValidate_MissingKustomizeBuildConfig(t *testing.T) {
 	p := &Pipeline{
 		Pipeline: []StepConfig{
-			{Name: "a", Type: StepTypeKustomize},
+			{Name: "a", Type: StepTypeKustomizeBuild},
 		},
 	}
 	err := p.Validate()
 	if err == nil {
 		t.Fatal("expected error")
 	}
-	if !strings.Contains(err.Error(), "kustomize config is required") {
+	if !strings.Contains(err.Error(), "kustomize-build config is required") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestValidate_KustomizeBuildMissingOutputFile(t *testing.T) {
+	p := &Pipeline{
+		Pipeline: []StepConfig{
+			{Name: "a", Type: StepTypeKustomizeBuild, KustomizeBuild: &KustomizeBuildConfig{Dir: "."}},
+		},
+	}
+	err := p.Validate()
+	if err == nil {
+		t.Fatal("expected error for missing outputFile")
+	}
+	if !strings.Contains(err.Error(), "kustomize-build.outputFile is required") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -168,26 +183,23 @@ func TestValidate_SplitMissingInput(t *testing.T) {
 	}
 }
 
-func TestValidate_SplitInputReferencesNonExistent(t *testing.T) {
+func TestValidate_SplitInputIsFilePath(t *testing.T) {
+	// split.input is now a file path, not a step reference — any non-empty string is valid
 	p := &Pipeline{
 		Pipeline: []StepConfig{
 			{Name: "render", Type: StepTypeTemplate, Template: &TemplateConfig{}},
 			{Name: "split", Type: StepTypeSplit, Split: &SplitConfig{Input: "render", By: SplitByKind}},
 		},
 	}
-	err := p.Validate()
-	if err == nil {
-		t.Fatal("expected error for split referencing non-output step")
-	}
-	if !strings.Contains(err.Error(), "does not reference an earlier kustomize or helm step") {
-		t.Fatalf("unexpected error: %v", err)
+	if err := p.Validate(); err != nil {
+		t.Fatalf("expected valid pipeline, got error: %v", err)
 	}
 }
 
 func TestValidate_SplitInvalidStrategy(t *testing.T) {
 	p := &Pipeline{
 		Pipeline: []StepConfig{
-			{Name: "build", Type: StepTypeKustomize, Kustomize: &KustomizeConfig{Dir: "."}},
+			{Name: "build", Type: StepTypeKustomizeBuild, KustomizeBuild: &KustomizeBuildConfig{Dir: ".", OutputFile: "build.yaml"}},
 			{Name: "split", Type: StepTypeSplit, Split: &SplitConfig{Input: "build", By: "invalid"}},
 		},
 	}
@@ -203,7 +215,7 @@ func TestValidate_SplitInvalidStrategy(t *testing.T) {
 func TestValidate_SplitCustomWithoutTemplate(t *testing.T) {
 	p := &Pipeline{
 		Pipeline: []StepConfig{
-			{Name: "build", Type: StepTypeKustomize, Kustomize: &KustomizeConfig{Dir: "."}},
+			{Name: "build", Type: StepTypeKustomizeBuild, KustomizeBuild: &KustomizeBuildConfig{Dir: ".", OutputFile: "build.yaml"}},
 			{Name: "split", Type: StepTypeSplit, Split: &SplitConfig{Input: "build", By: SplitByCustom}},
 		},
 	}
@@ -281,41 +293,38 @@ func TestValidate_GenerateMissingTemplate(t *testing.T) {
 
 func TestValidate_SourceNoScheme(t *testing.T) {
 	p := &Pipeline{
-		Source: Sources{{Path: "somewhere/"}},
 		Pipeline: []StepConfig{
-			{Name: "a", Type: StepTypeTemplate, Template: &TemplateConfig{}},
+			{Name: "a", Type: StepTypeTemplate, Template: &TemplateConfig{}, Source: Sources{{Path: "somewhere/"}}},
 		},
 	}
 	err := p.Validate()
 	if err == nil {
 		t.Fatal("expected error for source with no scheme")
 	}
-	if !strings.Contains(err.Error(), "exactly one of oci, https, file, or ocm must be set") {
+	if !strings.Contains(err.Error(), "exactly one of oci, https, file, ocm, or helm must be set") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
 func TestValidate_SourceMultipleSchemes(t *testing.T) {
 	p := &Pipeline{
-		Source: Sources{{OCI: "x", HTTPS: "y"}},
 		Pipeline: []StepConfig{
-			{Name: "a", Type: StepTypeTemplate, Template: &TemplateConfig{}},
+			{Name: "a", Type: StepTypeTemplate, Template: &TemplateConfig{}, Source: Sources{{OCI: "x", HTTPS: "y"}}},
 		},
 	}
 	err := p.Validate()
 	if err == nil {
 		t.Fatal("expected error for source with multiple schemes")
 	}
-	if !strings.Contains(err.Error(), "exactly one of oci, https, file, or ocm must be set") {
+	if !strings.Contains(err.Error(), "exactly one of oci, https, file, ocm, or helm must be set") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
 func TestValidate_SourcePathTraversal(t *testing.T) {
 	p := &Pipeline{
-		Source: Sources{{OCI: "ghcr.io/myorg/image:v1", Path: "../escape"}},
 		Pipeline: []StepConfig{
-			{Name: "a", Type: StepTypeTemplate, Template: &TemplateConfig{}},
+			{Name: "a", Type: StepTypeTemplate, Template: &TemplateConfig{}, Source: Sources{{OCI: "ghcr.io/myorg/image:v1", Path: "../escape"}}},
 		},
 	}
 	err := p.Validate()
@@ -329,9 +338,8 @@ func TestValidate_SourcePathTraversal(t *testing.T) {
 
 func TestValidate_SourceAbsolutePath(t *testing.T) {
 	p := &Pipeline{
-		Source: Sources{{OCI: "ghcr.io/myorg/image:v1", Path: "/absolute/path"}},
 		Pipeline: []StepConfig{
-			{Name: "a", Type: StepTypeTemplate, Template: &TemplateConfig{}},
+			{Name: "a", Type: StepTypeTemplate, Template: &TemplateConfig{}, Source: Sources{{OCI: "ghcr.io/myorg/image:v1", Path: "/absolute/path"}}},
 		},
 	}
 	err := p.Validate()
@@ -345,9 +353,8 @@ func TestValidate_SourceAbsolutePath(t *testing.T) {
 
 func TestValidate_SourceValid(t *testing.T) {
 	p := &Pipeline{
-		Source: Sources{{OCI: "ghcr.io/myorg/image:v1", Path: "subdir/"}},
 		Pipeline: []StepConfig{
-			{Name: "a", Type: StepTypeTemplate, Template: &TemplateConfig{}},
+			{Name: "a", Type: StepTypeTemplate, Template: &TemplateConfig{}, Source: Sources{{OCI: "ghcr.io/myorg/image:v1", Path: "subdir/"}}},
 		},
 	}
 	if err := p.Validate(); err != nil {
@@ -357,9 +364,8 @@ func TestValidate_SourceValid(t *testing.T) {
 
 func TestValidate_SourceOCMValid(t *testing.T) {
 	p := &Pipeline{
-		Source: Sources{{OCM: "ghcr.io/myorg/ocm//comp:v1"}},
 		Pipeline: []StepConfig{
-			{Name: "a", Type: StepTypeTemplate, Template: &TemplateConfig{}},
+			{Name: "a", Type: StepTypeTemplate, Template: &TemplateConfig{}, Source: Sources{{OCM: "ghcr.io/myorg/ocm//comp:v1"}}},
 		},
 	}
 	if err := p.Validate(); err != nil {
@@ -369,9 +375,8 @@ func TestValidate_SourceOCMValid(t *testing.T) {
 
 func TestValidate_SourceRecursiveWithoutOCM(t *testing.T) {
 	p := &Pipeline{
-		Source: Sources{{OCI: "ghcr.io/myorg/image:v1", Recursive: true}},
 		Pipeline: []StepConfig{
-			{Name: "a", Type: StepTypeTemplate, Template: &TemplateConfig{}},
+			{Name: "a", Type: StepTypeTemplate, Template: &TemplateConfig{}, Source: Sources{{OCI: "ghcr.io/myorg/image:v1", Recursive: true}}},
 		},
 	}
 	err := p.Validate()
@@ -385,9 +390,8 @@ func TestValidate_SourceRecursiveWithoutOCM(t *testing.T) {
 
 func TestValidate_SourceRecursiveWithOCM(t *testing.T) {
 	p := &Pipeline{
-		Source: Sources{{OCM: "ghcr.io/myorg/ocm//comp:v1", Recursive: true}},
 		Pipeline: []StepConfig{
-			{Name: "a", Type: StepTypeTemplate, Template: &TemplateConfig{}},
+			{Name: "a", Type: StepTypeTemplate, Template: &TemplateConfig{}, Source: Sources{{OCM: "ghcr.io/myorg/ocm//comp:v1", Recursive: true}}},
 		},
 	}
 	if err := p.Validate(); err != nil {
@@ -410,7 +414,7 @@ func TestValidate_StepSourceInvalid(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for step source with no scheme")
 	}
-	if !strings.Contains(err.Error(), "exactly one of oci, https, file, or ocm must be set") {
+	if !strings.Contains(err.Error(), "exactly one of oci, https, file, ocm, or helm must be set") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -442,5 +446,289 @@ func TestValidate_HelmValidFull(t *testing.T) {
 	}
 	if err := p.Validate(); err != nil {
 		t.Fatalf("expected valid pipeline, got: %v", err)
+	}
+}
+
+func TestValidate_KustomizeCreateValid(t *testing.T) {
+	p := &Pipeline{
+		Pipeline: []StepConfig{
+			{
+				Name: "create",
+				Type: StepTypeKustomizeCreate,
+				KustomizeCreate: &KustomizeCreateConfig{
+					Autodetect: true,
+					Namespace:  "staging",
+				},
+			},
+		},
+	}
+	if err := p.Validate(); err != nil {
+		t.Fatalf("expected valid pipeline, got error: %v", err)
+	}
+}
+
+func TestValidate_KustomizeCreateValidResources(t *testing.T) {
+	p := &Pipeline{
+		Pipeline: []StepConfig{
+			{
+				Name: "create",
+				Type: StepTypeKustomizeCreate,
+				KustomizeCreate: &KustomizeCreateConfig{
+					Resources: []string{"deployment.yaml", "../base"},
+				},
+			},
+		},
+	}
+	if err := p.Validate(); err != nil {
+		t.Fatalf("expected valid pipeline, got error: %v", err)
+	}
+}
+
+func TestValidate_MissingKustomizeCreateConfig(t *testing.T) {
+	p := &Pipeline{
+		Pipeline: []StepConfig{
+			{Name: "a", Type: StepTypeKustomizeCreate},
+		},
+	}
+	err := p.Validate()
+	if err == nil {
+		t.Fatal("expected error for missing kustomize-create config")
+	}
+	if !strings.Contains(err.Error(), "kustomize-create config is required") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestValidate_KustomizeCreateNeitherAutodetectNorResources(t *testing.T) {
+	p := &Pipeline{
+		Pipeline: []StepConfig{
+			{
+				Name:            "create",
+				Type:            StepTypeKustomizeCreate,
+				KustomizeCreate: &KustomizeCreateConfig{Namespace: "test"},
+			},
+		},
+	}
+	err := p.Validate()
+	if err == nil {
+		t.Fatal("expected error when neither autodetect nor resources is set")
+	}
+	if !strings.Contains(err.Error(), "at least one of autodetect or resources must be set") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestValidate_KustomizeCreateRecursiveWithoutAutodetect(t *testing.T) {
+	p := &Pipeline{
+		Pipeline: []StepConfig{
+			{
+				Name: "create",
+				Type: StepTypeKustomizeCreate,
+				KustomizeCreate: &KustomizeCreateConfig{
+					Resources: []string{"deploy.yaml"},
+					Recursive: true,
+				},
+			},
+		},
+	}
+	err := p.Validate()
+	if err == nil {
+		t.Fatal("expected error for recursive without autodetect")
+	}
+	if !strings.Contains(err.Error(), "recursive requires autodetect") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestValidate_SHA256InvalidLength(t *testing.T) {
+	p := &Pipeline{
+		Pipeline: []StepConfig{
+			{Name: "a", Type: StepTypeTemplate, Template: &TemplateConfig{}, Source: Sources{{HTTPS: "https://example.com/file.yaml", SHA256: "abcd"}}},
+		},
+	}
+	err := p.Validate()
+	if err == nil {
+		t.Fatal("expected error for short sha256")
+	}
+	if !strings.Contains(err.Error(), "64 lowercase hex") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestValidate_SHA256Uppercase(t *testing.T) {
+	p := &Pipeline{
+		Pipeline: []StepConfig{
+			{Name: "a", Type: StepTypeTemplate, Template: &TemplateConfig{}, Source: Sources{{HTTPS: "https://example.com/file.yaml", SHA256: "ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789"}}},
+		},
+	}
+	err := p.Validate()
+	if err == nil {
+		t.Fatal("expected error for uppercase sha256")
+	}
+	if !strings.Contains(err.Error(), "64 lowercase hex") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestValidate_SHA256NonHex(t *testing.T) {
+	p := &Pipeline{
+		Pipeline: []StepConfig{
+			{Name: "a", Type: StepTypeTemplate, Template: &TemplateConfig{}, Source: Sources{{HTTPS: "https://example.com/file.yaml", SHA256: "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"}}},
+		},
+	}
+	err := p.Validate()
+	if err == nil {
+		t.Fatal("expected error for non-hex sha256")
+	}
+	if !strings.Contains(err.Error(), "64 lowercase hex") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestValidate_SHA256OnOCISource(t *testing.T) {
+	p := &Pipeline{
+		Pipeline: []StepConfig{
+			{Name: "a", Type: StepTypeTemplate, Template: &TemplateConfig{}, Source: Sources{{OCI: "ghcr.io/myorg/image:v1", SHA256: "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"}}},
+		},
+	}
+	err := p.Validate()
+	if err == nil {
+		t.Fatal("expected error for sha256 on OCI source")
+	}
+	if !strings.Contains(err.Error(), "sha256 is only supported for https sources") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestValidate_SHA256ValidOnHTTPS(t *testing.T) {
+	p := &Pipeline{
+		Pipeline: []StepConfig{
+			{Name: "a", Type: StepTypeTemplate, Template: &TemplateConfig{}, Source: Sources{{HTTPS: "https://example.com/file.yaml", SHA256: "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"}}},
+		},
+	}
+	if err := p.Validate(); err != nil {
+		t.Fatalf("expected valid pipeline, got error: %v", err)
+	}
+}
+
+func TestValidate_ExcludePatterns_Valid(t *testing.T) {
+	p := &Pipeline{
+		Pipeline: []StepConfig{
+			{
+				Name:     "render",
+				Type:     StepTypeTemplate,
+				Template: &TemplateConfig{},
+				Exclude:  []string{"**/*.tmp", "build-output/**"},
+			},
+		},
+	}
+	if err := p.Validate(); err != nil {
+		t.Fatalf("expected valid pipeline with exclude patterns, got error: %v", err)
+	}
+}
+
+func TestValidate_ExcludePatterns_Invalid(t *testing.T) {
+	p := &Pipeline{
+		Pipeline: []StepConfig{
+			{
+				Name:     "render",
+				Type:     StepTypeTemplate,
+				Template: &TemplateConfig{},
+				Exclude:  []string{"[invalid"},
+			},
+		},
+	}
+	err := p.Validate()
+	if err == nil {
+		t.Fatal("expected error for invalid exclude pattern")
+	}
+	if !strings.Contains(err.Error(), "invalid glob pattern") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestValidate_SourceHelmValid(t *testing.T) {
+	p := &Pipeline{
+		Pipeline: []StepConfig{
+			{Name: "a", Type: StepTypeTemplate, Template: &TemplateConfig{}, Source: Sources{{Helm: "mychart", Repo: "https://charts.example.com"}}},
+		},
+	}
+	if err := p.Validate(); err != nil {
+		t.Fatalf("expected valid pipeline, got error: %v", err)
+	}
+}
+
+func TestValidate_SourceHelmWithVersion(t *testing.T) {
+	p := &Pipeline{
+		Pipeline: []StepConfig{
+			{Name: "a", Type: StepTypeTemplate, Template: &TemplateConfig{}, Source: Sources{{Helm: "mychart", Repo: "https://charts.example.com", Version: "1.2.3"}}},
+		},
+	}
+	if err := p.Validate(); err != nil {
+		t.Fatalf("expected valid pipeline, got error: %v", err)
+	}
+}
+
+func TestValidate_SourceHelmMissingRepo(t *testing.T) {
+	p := &Pipeline{
+		Pipeline: []StepConfig{
+			{Name: "a", Type: StepTypeTemplate, Template: &TemplateConfig{}, Source: Sources{{Helm: "mychart"}}},
+		},
+	}
+	err := p.Validate()
+	if err == nil {
+		t.Fatal("expected error for helm without repo")
+	}
+	if !strings.Contains(err.Error(), "repo is required when helm is set") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestValidate_SourceRepoWithoutHelm(t *testing.T) {
+	p := &Pipeline{
+		Pipeline: []StepConfig{
+			{Name: "a", Type: StepTypeTemplate, Template: &TemplateConfig{}, Source: Sources{{OCI: "ghcr.io/myorg/image:v1", Repo: "https://charts.example.com"}}},
+		},
+	}
+	err := p.Validate()
+	if err == nil {
+		t.Fatal("expected error for repo without helm")
+	}
+	if !strings.Contains(err.Error(), "repo is only valid when helm is set") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestValidate_SourceVersionWithoutHelm(t *testing.T) {
+	p := &Pipeline{
+		Pipeline: []StepConfig{
+			{Name: "a", Type: StepTypeTemplate, Template: &TemplateConfig{}, Source: Sources{{OCI: "ghcr.io/myorg/image:v1", Version: "1.0.0"}}},
+		},
+	}
+	err := p.Validate()
+	if err == nil {
+		t.Fatal("expected error for version without helm")
+	}
+	if !strings.Contains(err.Error(), "version is only valid when helm is set") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestValidate_SourceTemporaryValid(t *testing.T) {
+	schemes := []SourceEntry{
+		{OCI: "ghcr.io/myorg/image:v1", Temporary: true},
+		{HTTPS: "https://example.com/file.yaml", Temporary: true},
+		{File: "/tmp/source", Temporary: true},
+		{OCM: "ghcr.io/myorg/ocm//comp:v1", Temporary: true},
+	}
+	for _, src := range schemes {
+		p := &Pipeline{
+			Pipeline: []StepConfig{
+				{Name: "a", Type: StepTypeTemplate, Template: &TemplateConfig{}, Source: Sources{src}},
+			},
+		}
+		if err := p.Validate(); err != nil {
+			t.Errorf("expected temporary: true to be valid with source %+v, got error: %v", src, err)
+		}
 	}
 }

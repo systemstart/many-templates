@@ -1,0 +1,10 @@
+pipeline:
+  - name: fetch-and-render
+    type: template
+    source:
+      # renovate: datasource=github-tags depName=myorg/configs
+      https: https://github.com/myorg/configs/archive/main.tar.gz
+      sha256: ""
+    template:
+      files:
+        include: ["**/*.yaml"]

@@ -101,16 +101,21 @@ data:
   key: value
 `)
 
-	step := NewKustomizeStep("build", &api.KustomizeConfig{Dir: "."})
+	step := NewKustomizeBuildStep("build", &api.KustomizeBuildConfig{Dir: ".", OutputFile: "out.yaml"})
 	result, err := step.Run(StepContext{WorkDir: dir})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result == nil || len(result.Output) == 0 {
-		t.Fatal("expected non-empty output")
+	if result == nil {
+		t.Fatal("expected non-nil result")
 	}
-	if !strings.Contains(string(result.Output), "test-cm") {
-		t.Error("output should contain configmap name")
+
+	content, err := os.ReadFile(filepath.Join(dir, "out.yaml"))
+	if err != nil {
+		t.Fatalf("expected output file to exist: %v", err)
+	}
+	if !strings.Contains(string(content), "test-cm") {
+		t.Error("output file should contain configmap name")
 	}
 }
 
@@ -136,11 +141,15 @@ spec:
     - port: 80
 `)
 
-	result, err := NewKustomizeStep("build", &api.KustomizeConfig{Dir: "overlay"}).Run(StepContext{WorkDir: dir})
+	_, err := NewKustomizeBuildStep("build", &api.KustomizeBuildConfig{Dir: "overlay", OutputFile: "out.yaml"}).Run(StepContext{WorkDir: dir})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.Contains(string(result.Output), "my-svc") {
+	content, readErr := os.ReadFile(filepath.Join(dir, "out.yaml"))
+	if readErr != nil {
+		t.Fatalf("expected output file to exist: %v", readErr)
+	}
+	if !strings.Contains(string(content), "my-svc") {
 		t.Error("output should contain the service")
 	}
 }
@@ -148,12 +157,45 @@ spec:
 func TestKustomizeStep_RunInvalidDir(t *testing.T) {
 	skipWithoutKustomize(t)
 
-	_, err := NewKustomizeStep("build", &api.KustomizeConfig{Dir: "nonexistent"}).Run(StepContext{WorkDir: t.TempDir()})
+	_, err := NewKustomizeBuildStep("build", &api.KustomizeBuildConfig{Dir: "nonexistent"}).Run(StepContext{WorkDir: t.TempDir()})
 	if err == nil {
 		t.Fatal("expected error for nonexistent kustomize dir")
 	}
 	if !strings.Contains(err.Error(), "kustomize build failed") {
 		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestKustomizeStep_OutputFile(t *testing.T) {
+	skipWithoutKustomize(t)
+
+	dir := t.TempDir()
+	writeTestFile(t, dir, "kustomization.yaml", `apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - configmap.yaml
+`)
+	writeTestFile(t, dir, "configmap.yaml", `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: test-cm
+data:
+  key: value
+`)
+
+	step := NewKustomizeBuildStep("build", &api.KustomizeBuildConfig{OutputFile: "out/result.yaml"})
+	_, err := step.Run(StepContext{WorkDir: dir})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// File should be written
+	content, err := os.ReadFile(filepath.Join(dir, "out", "result.yaml"))
+	if err != nil {
+		t.Fatalf("expected output file to exist: %v", err)
+	}
+	if !strings.Contains(string(content), "test-cm") {
+		t.Error("output file should contain configmap name")
 	}
 }
 
@@ -175,11 +217,15 @@ data:
   key: dmFsdWU=
 `)
 
-	result, err := NewKustomizeStep("build", &api.KustomizeConfig{}).Run(StepContext{WorkDir: dir})
+	_, err := NewKustomizeBuildStep("build", &api.KustomizeBuildConfig{OutputFile: "out.yaml"}).Run(StepContext{WorkDir: dir})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.Contains(string(result.Output), "my-secret") {
+	content, readErr := os.ReadFile(filepath.Join(dir, "out.yaml"))
+	if readErr != nil {
+		t.Fatalf("expected output file to exist: %v", readErr)
+	}
+	if !strings.Contains(string(content), "my-secret") {
 		t.Error("output should contain the secret")
 	}
 }

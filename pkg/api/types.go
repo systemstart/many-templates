@@ -9,11 +9,12 @@ import (
 const (
 	DefaultFileInclude = "**/*"
 
-	StepTypeTemplate  = "template"
-	StepTypeKustomize = "kustomize"
-	StepTypeHelm      = "helm"
-	StepTypeSplit     = "split"
-	StepTypeGenerate  = "generate"
+	StepTypeTemplate        = "template"
+	StepTypeKustomizeBuild  = "kustomize-build"
+	StepTypeKustomizeCreate = "kustomize-create"
+	StepTypeHelm            = "helm"
+	StepTypeSplit           = "split"
+	StepTypeGenerate        = "generate"
 
 	SplitByKind     = "kind"
 	SplitByResource = "resource"
@@ -28,8 +29,13 @@ type SourceEntry struct {
 	HTTPS     string `yaml:"https,omitempty"`
 	File      string `yaml:"file,omitempty"`
 	OCM       string `yaml:"ocm,omitempty"`
+	Helm      string `yaml:"helm,omitempty"`      // Helm chart name
+	Repo      string `yaml:"repo,omitempty"`      // Helm chart repository URL (helm only)
+	Version   string `yaml:"version,omitempty"`   // Helm chart version (helm only)
+	SHA256    string `yaml:"sha256,omitempty"`    // optional checksum for HTTPS sources
 	Recursive bool   `yaml:"recursive,omitempty"` // only valid with OCM
 	Path      string `yaml:"path,omitempty"`      // target subdirectory within pipeline dir
+	Temporary bool   `yaml:"temporary,omitempty"` // remove overlaid files after pipeline/step execution
 }
 
 // URI returns the resolve-compatible URI string.
@@ -43,6 +49,8 @@ func (e SourceEntry) URI() string {
 		return e.File
 	case e.OCM != "":
 		return "ocm://" + e.OCM
+	case e.Helm != "":
+		return "helm://" + e.Helm
 	default:
 		return ""
 	}
@@ -61,6 +69,9 @@ func (e SourceEntry) SchemeCount() int {
 		n++
 	}
 	if e.OCM != "" {
+		n++
+	}
+	if e.Helm != "" {
 		n++
 	}
 	return n
@@ -92,7 +103,6 @@ func (s *Sources) UnmarshalYAML(value *yaml.Node) error {
 
 // Pipeline is the .many.yaml configuration format.
 type Pipeline struct {
-	Source   Sources        `yaml:"source,omitempty"`
 	Context  map[string]any `yaml:"context"`
 	Pipeline []StepConfig   `yaml:"pipeline"`
 
@@ -103,14 +113,16 @@ type Pipeline struct {
 
 // StepConfig defines a single step within a pipeline.
 type StepConfig struct {
-	Name      string           `yaml:"name"`
-	Type      string           `yaml:"type"`
-	Source    Sources          `yaml:"source,omitempty"`
-	Template  *TemplateConfig  `yaml:"template,omitempty"`
-	Kustomize *KustomizeConfig `yaml:"kustomize,omitempty"`
-	Helm      *HelmConfig      `yaml:"helm,omitempty"`
-	Split     *SplitConfig     `yaml:"split,omitempty"`
-	Generate  *GenerateConfig  `yaml:"generate,omitempty"`
+	Name            string                 `yaml:"name"`
+	Type            string                 `yaml:"type"`
+	Source          Sources                `yaml:"source,omitempty"`
+	Exclude         []string               `yaml:"exclude,omitempty"`
+	Template        *TemplateConfig        `yaml:"template,omitempty"`
+	KustomizeBuild  *KustomizeBuildConfig  `yaml:"kustomize-build,omitempty"`
+	KustomizeCreate *KustomizeCreateConfig `yaml:"kustomize-create,omitempty"`
+	Helm            *HelmConfig            `yaml:"helm,omitempty"`
+	Split           *SplitConfig           `yaml:"split,omitempty"`
+	Generate        *GenerateConfig        `yaml:"generate,omitempty"`
 }
 
 // FileFilter defines include/exclude glob patterns.
@@ -124,10 +136,11 @@ type TemplateConfig struct {
 	Files FileFilter `yaml:"files"`
 }
 
-// KustomizeConfig configures the kustomize step.
-type KustomizeConfig struct {
+// KustomizeBuildConfig configures the kustomize-build step.
+type KustomizeBuildConfig struct {
 	Dir        string `yaml:"dir"`
 	EnableHelm bool   `yaml:"enableHelm"`
+	OutputFile string `yaml:"outputFile,omitempty"`
 }
 
 // HelmConfig configures the helm step.
@@ -137,12 +150,26 @@ type HelmConfig struct {
 	Namespace   string            `yaml:"namespace"`
 	ValuesFiles []string          `yaml:"valuesFiles"`
 	Set         map[string]string `yaml:"set"`
+	OutputFile  string            `yaml:"outputFile,omitempty"`
 }
 
 // GenerateConfig configures the generate step.
 type GenerateConfig struct {
 	Output   string `yaml:"output"`
 	Template string `yaml:"template"`
+}
+
+// KustomizeCreateConfig configures the kustomize-create step.
+type KustomizeCreateConfig struct {
+	Dir         string            `yaml:"dir"`
+	Autodetect  bool              `yaml:"autodetect"`
+	Recursive   bool              `yaml:"recursive"`
+	Resources   []string          `yaml:"resources"`
+	Namespace   string            `yaml:"namespace"`
+	NamePrefix  string            `yaml:"nameprefix"`
+	NameSuffix  string            `yaml:"namesuffix"`
+	Annotations map[string]string `yaml:"annotations"`
+	Labels      map[string]string `yaml:"labels"`
 }
 
 // SplitConfig configures the split step.

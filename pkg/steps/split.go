@@ -38,12 +38,14 @@ func NewSplitStep(name string, cfg *api.SplitConfig) Step {
 func (s *splitStep) Name() string { return s.name }
 
 func (s *splitStep) Run(ctx StepContext) (*StepResult, error) {
-	if len(ctx.InputData) == 0 {
-		return nil, fmt.Errorf("no input data provided")
+	inputPath := filepath.Join(ctx.WorkDir, s.cfg.Input)
+	inputData, err := os.ReadFile(inputPath)
+	if err != nil {
+		return nil, fmt.Errorf("reading input file %q: %w", s.cfg.Input, err)
 	}
 
 	canonicalOrder := s.cfg.CanonicalKeyOrder == nil || *s.cfg.CanonicalKeyOrder
-	manifests, err := parseMultiDocYAML(ctx.InputData, canonicalOrder)
+	manifests, err := parseMultiDocYAML(inputData, canonicalOrder)
 	if err != nil {
 		return nil, fmt.Errorf("parsing multi-doc YAML: %w", err)
 	}

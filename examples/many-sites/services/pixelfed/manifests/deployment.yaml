@@ -2,7 +2,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: pixelfed
-  namespace: pixelfed
   labels:
     app.kubernetes.io/name: pixelfed
 spec:
@@ -17,7 +16,8 @@ spec:
     spec:
       containers:
         - name: pixelfed
-          image: zknt/pixelfed:latest
+          # renovate: datasource=docker depName=zknt/pixelfed
+          image: zknt/pixelfed:2025-11-20
           ports:
             - name: http
               containerPort: 80

@@ -1,7 +1,27 @@
+context:
+  pg:
+    appName: mobilizon
+    image: "postgis/postgis:16-3.4"
+    dbName: mobilizon
+    dbUser: mobilizon
+    secretName: mobilizon-secrets
+    secretKey: POSTGRES_PASSWORD
+
 pipeline:
   - name: render-templates
     type: template
+    source:
+      - file: manifests/
+        path: manifests/
+      - file: ../../shared/postgres.yaml
+        path: manifests/
     template:
       files:
         include: ["**/*.yaml"]
-        exclude: [".many.yaml"]
+
+  - name: create-kustomization
+    type: kustomize-create
+    kustomize-create:
+      autodetect: true
+      recursive: true
+      namespace: mobilizon

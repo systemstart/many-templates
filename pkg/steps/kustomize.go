@@ -17,19 +17,19 @@ const (
 	helmChartsDir         = "charts"
 )
 
-type kustomizeStep struct {
+type kustomizeBuildStep struct {
 	name string
-	cfg  *api.KustomizeConfig
+	cfg  *api.KustomizeBuildConfig
 }
 
-// NewKustomizeStep creates a kustomize step.
-func NewKustomizeStep(name string, cfg *api.KustomizeConfig) Step {
-	return &kustomizeStep{name: name, cfg: cfg}
+// NewKustomizeBuildStep creates a kustomize-build step.
+func NewKustomizeBuildStep(name string, cfg *api.KustomizeBuildConfig) Step {
+	return &kustomizeBuildStep{name: name, cfg: cfg}
 }
 
-func (s *kustomizeStep) Name() string { return s.name }
+func (s *kustomizeBuildStep) Name() string { return s.name }
 
-func (s *kustomizeStep) Run(ctx StepContext) (*StepResult, error) {
+func (s *kustomizeBuildStep) Run(ctx StepContext) (*StepResult, error) {
 	dir := s.cfg.Dir
 	if dir == "" {
 		dir = "."
@@ -58,13 +58,22 @@ func (s *kustomizeStep) Run(ctx StepContext) (*StepResult, error) {
 		return nil, fmt.Errorf("kustomize build failed: %w\nstderr: %s", err, stderr.String())
 	}
 
-	result := &StepResult{Output: stdout.Bytes()}
-
-	if s.cfg.EnableHelm {
-		result.Cleanup = collectKustomizeCleanup(dir)
+	if s.cfg.OutputFile != "" {
+		outPath := filepath.Join(ctx.WorkDir, s.cfg.OutputFile)
+		if err := os.MkdirAll(filepath.Dir(outPath), 0o750); err != nil {
+			return nil, fmt.Errorf("creating output directory: %w", err)
+		}
+		if err := os.WriteFile(outPath, stdout.Bytes(), 0o600); err != nil {
+			return nil, fmt.Errorf("writing output file: %w", err)
+		}
 	}
 
-	return result, nil
+	var cleanup []string
+	if s.cfg.EnableHelm {
+		cleanup = collectKustomizeCleanup(dir)
+	}
+
+	return &StepResult{Cleanup: cleanup}, nil
 }
 
 // kustomizationFile is a minimal representation for collecting cleanup paths.

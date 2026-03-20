@@ -11,8 +11,10 @@ func NewStep(cfg api.StepConfig) (Step, error) {
 	switch cfg.Type {
 	case api.StepTypeTemplate:
 		return NewTemplateStep(cfg.Name, cfg.Template), nil
-	case api.StepTypeKustomize:
-		return NewKustomizeStep(cfg.Name, cfg.Kustomize), nil
+	case api.StepTypeKustomizeBuild:
+		return NewKustomizeBuildStep(cfg.Name, cfg.KustomizeBuild), nil
+	case api.StepTypeKustomizeCreate:
+		return NewKustomizeCreateStep(cfg.Name, cfg.KustomizeCreate), nil
 	case api.StepTypeHelm:
 		return NewHelmStep(cfg.Name, cfg.Helm), nil
 	case api.StepTypeSplit:

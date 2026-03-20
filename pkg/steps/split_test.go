@@ -167,7 +167,7 @@ metadata:
 func TestSplitStep_Run(t *testing.T) {
 	dir := t.TempDir()
 
-	input := []byte(`apiVersion: v1
+	writeTestFile(t, dir, "build.yaml", `apiVersion: v1
 kind: Service
 metadata:
   name: my-svc
@@ -179,17 +179,12 @@ metadata:
 `)
 
 	step := NewSplitStep("split", &api.SplitConfig{
-		Input:     "build",
+		Input:     "build.yaml",
 		By:        api.SplitByKind,
 		OutputDir: "out",
 	})
 
-	ctx := StepContext{
-		WorkDir:   dir,
-		InputData: input,
-	}
-
-	result, err := step.Run(ctx)
+	result, err := step.Run(StepContext{WorkDir: dir})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -230,33 +225,35 @@ metadata:
 
 func TestSplitStep_NoInput(t *testing.T) {
 	step := NewSplitStep("split", &api.SplitConfig{
-		Input: "build",
+		Input: "nonexistent.yaml",
 		By:    api.SplitByKind,
 	})
 
 	_, err := step.Run(StepContext{WorkDir: t.TempDir()})
 	if err == nil {
-		t.Fatal("expected error for no input data")
+		t.Fatal("expected error for missing input file")
 	}
 }
 
 func TestSplitStep_DefaultOutputDir(t *testing.T) {
 	dir := t.TempDir()
 
-	input := []byte(`apiVersion: v1
+	input := `apiVersion: v1
 kind: ConfigMap
 metadata:
   name: test
-`)
+`
+	if err := os.WriteFile(filepath.Join(dir, "build.yaml"), []byte(input), 0o600); err != nil {
+		t.Fatal(err)
+	}
 
 	step := NewSplitStep("split", &api.SplitConfig{
-		Input: "build",
+		Input: "build.yaml",
 		By:    api.SplitByKind,
 	})
 
 	ctx := StepContext{
-		WorkDir:   dir,
-		InputData: input,
+		WorkDir: dir,
 	}
 
 	if _, err := step.Run(ctx); err != nil {
@@ -333,19 +330,21 @@ func TestSplitStep_MissingKindOrName(t *testing.T) {
 	dir := t.TempDir()
 
 	// Manifest with no kind field
-	input := []byte(`apiVersion: v1
+	input := `apiVersion: v1
 metadata:
   name: test
-`)
+`
+	if err := os.WriteFile(filepath.Join(dir, "build.yaml"), []byte(input), 0o600); err != nil {
+		t.Fatal(err)
+	}
 
 	step := NewSplitStep("split", &api.SplitConfig{
-		Input: "build",
+		Input: "build.yaml",
 		By:    api.SplitByKind,
 	})
 
 	ctx := StepContext{
-		WorkDir:   dir,
-		InputData: input,
+		WorkDir: dir,
 	}
 
 	// Should still work (kind will be empty string, filename will be .yaml)
@@ -358,7 +357,7 @@ metadata:
 func TestSplitStep_ResourceStrategy(t *testing.T) {
 	dir := t.TempDir()
 
-	input := []byte(`apiVersion: v1
+	input := `apiVersion: v1
 kind: Service
 metadata:
   name: svc-a
@@ -367,17 +366,19 @@ apiVersion: v1
 kind: Service
 metadata:
   name: svc-b
-`)
+`
+	if err := os.WriteFile(filepath.Join(dir, "build.yaml"), []byte(input), 0o600); err != nil {
+		t.Fatal(err)
+	}
 
 	step := NewSplitStep("split", &api.SplitConfig{
-		Input:     "build",
+		Input:     "build.yaml",
 		By:        api.SplitByResource,
 		OutputDir: "out",
 	})
 
 	ctx := StepContext{
-		WorkDir:   dir,
-		InputData: input,
+		WorkDir: dir,
 	}
 
 	if _, err := step.Run(ctx); err != nil {
@@ -396,7 +397,7 @@ metadata:
 func TestSplitStep_GroupStrategy(t *testing.T) {
 	dir := t.TempDir()
 
-	input := []byte(`apiVersion: v1
+	input := `apiVersion: v1
 kind: Service
 metadata:
   name: svc
@@ -405,17 +406,19 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: deploy
-`)
+`
+	if err := os.WriteFile(filepath.Join(dir, "build.yaml"), []byte(input), 0o600); err != nil {
+		t.Fatal(err)
+	}
 
 	step := NewSplitStep("split", &api.SplitConfig{
-		Input:     "build",
+		Input:     "build.yaml",
 		By:        api.SplitByGroup,
 		OutputDir: "out",
 	})
 
 	ctx := StepContext{
-		WorkDir:   dir,
-		InputData: input,
+		WorkDir: dir,
 	}
 
 	if _, err := step.Run(ctx); err != nil {
@@ -433,7 +436,7 @@ metadata:
 func TestSplitStep_KindDirStrategy(t *testing.T) {
 	dir := t.TempDir()
 
-	input := []byte(`apiVersion: v1
+	input := `apiVersion: v1
 kind: Service
 metadata:
   name: svc
@@ -442,17 +445,19 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: deploy
-`)
+`
+	if err := os.WriteFile(filepath.Join(dir, "build.yaml"), []byte(input), 0o600); err != nil {
+		t.Fatal(err)
+	}
 
 	step := NewSplitStep("split", &api.SplitConfig{
-		Input:     "build",
+		Input:     "build.yaml",
 		By:        api.SplitByKindDir,
 		OutputDir: "out",
 	})
 
 	ctx := StepContext{
-		WorkDir:   dir,
-		InputData: input,
+		WorkDir: dir,
 	}
 
 	if _, err := step.Run(ctx); err != nil {
@@ -470,23 +475,25 @@ metadata:
 func TestSplitStep_CustomStrategy(t *testing.T) {
 	dir := t.TempDir()
 
-	input := []byte(`apiVersion: v1
+	input := `apiVersion: v1
 kind: Service
 metadata:
   name: svc
   namespace: prod
-`)
+`
+	if err := os.WriteFile(filepath.Join(dir, "build.yaml"), []byte(input), 0o600); err != nil {
+		t.Fatal(err)
+	}
 
 	step := NewSplitStep("split", &api.SplitConfig{
-		Input:            "build",
+		Input:            "build.yaml",
 		By:               api.SplitByCustom,
 		OutputDir:        "out",
 		FileNameTemplate: `{{ .metadata.namespace }}/{{ .kind }}-{{ .metadata.name }}.yaml`,
 	})
 
 	ctx := StepContext{
-		WorkDir:   dir,
-		InputData: input,
+		WorkDir: dir,
 	}
 
 	if _, err := step.Run(ctx); err != nil {
@@ -501,24 +508,26 @@ metadata:
 func TestSplitStep_CanonicalKeyOrderDisabled(t *testing.T) {
 	dir := t.TempDir()
 
-	input := []byte(`kind: ConfigMap
+	input := `kind: ConfigMap
 apiVersion: v1
 metadata:
   name: test
 data:
   key: value
-`)
+`
+	if err := os.WriteFile(filepath.Join(dir, "build.yaml"), []byte(input), 0o600); err != nil {
+		t.Fatal(err)
+	}
 
 	boolFalse := false
 	step := NewSplitStep("split", &api.SplitConfig{
-		Input:             "build",
+		Input:             "build.yaml",
 		By:                api.SplitByKind,
 		CanonicalKeyOrder: &boolFalse,
 	})
 
 	ctx := StepContext{
-		WorkDir:   dir,
-		InputData: input,
+		WorkDir: dir,
 	}
 
 	if _, err := step.Run(ctx); err != nil {

@@ -4,12 +4,10 @@ package steps
 type StepContext struct {
 	WorkDir      string
 	TemplateData map[string]any
-	InputData    []byte // output from a prior step (used by split)
 }
 
 // StepResult holds the output of a step.
 type StepResult struct {
-	Output  []byte   // multi-doc YAML stream (kustomize/helm)
 	Cleanup []string // paths relative to WorkDir to remove after pipeline
 }
 

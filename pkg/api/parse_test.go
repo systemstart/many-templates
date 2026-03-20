@@ -18,9 +18,10 @@ pipeline:
       files:
         include: ["**/*.yaml"]
   - name: build
-    type: kustomize
-    kustomize:
+    type: kustomize-build
+    kustomize-build:
       dir: "."
+      outputFile: build.yaml
   - name: split
     type: split
     split:

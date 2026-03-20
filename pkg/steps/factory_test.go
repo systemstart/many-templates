@@ -21,11 +21,19 @@ func TestNewStep(t *testing.T) {
 			},
 		},
 		{
-			name: "kustomize step",
+			name: "kustomize-build step",
 			cfg: api.StepConfig{
-				Name:      "build",
-				Type:      api.StepTypeKustomize,
-				Kustomize: &api.KustomizeConfig{},
+				Name:           "build",
+				Type:           api.StepTypeKustomizeBuild,
+				KustomizeBuild: &api.KustomizeBuildConfig{},
+			},
+		},
+		{
+			name: "kustomize-create step",
+			cfg: api.StepConfig{
+				Name:            "create-kust",
+				Type:            api.StepTypeKustomizeCreate,
+				KustomizeCreate: &api.KustomizeCreateConfig{Autodetect: true},
 			},
 		},
 		{

@@ -2,7 +2,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: woodpecker-server
-  namespace: woodpecker
   labels:
     app.kubernetes.io/name: woodpecker
     app.kubernetes.io/component: server
@@ -20,7 +19,8 @@ spec:
     spec:
       containers:
         - name: woodpecker-server
-          image: woodpeckerci/woodpecker-server:latest
+          # renovate: datasource=docker depName=woodpeckerci/woodpecker-server
+          image: woodpeckerci/woodpecker-server:v3.13.0
           ports:
             - name: http
               containerPort: 8000

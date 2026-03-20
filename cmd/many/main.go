@@ -52,6 +52,8 @@ var (
 	loggingType              string
 	logLevel                 string
 	showVersion              bool
+	envFile                  string
+	noSHA256Update           bool
 )
 
 func init() {
@@ -110,6 +112,16 @@ func init() {
 		"version",
 		false,
 		"print version and exit")
+	flag.StringVar(
+		&envFile,
+		"env-file",
+		"",
+		"load environment variables from file")
+	flag.BoolVar(
+		&noSHA256Update,
+		"no-sha256-update",
+		false,
+		"disable sha256 writeback to .many.yaml files")
 }
 
 func runPull(args []string) {
@@ -119,7 +131,7 @@ func runPull(args []string) {
 	}
 	ref, dir := args[0], args[1]
 
-	resolved, cleanup, err := resolve.Resolve(ref)
+	resolved, cleanup, _, err := resolve.Resolve(ref, "")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
@@ -203,14 +215,14 @@ func runInstancesMode(globalContext map[string]any) {
 		}
 	}
 
-	if err := processing.RunInstances(cfg, inputDirectory, outputDirectory, globalContext, maxDepth, contextFile); err != nil {
+	if err := processing.RunInstances(cfg, inputDirectory, outputDirectory, globalContext, maxDepth, !noSHA256Update); err != nil {
 		slog.Error("instances processing failed", "error", err)
 		os.Exit(exitToolErrors)
 	}
 }
 
 func runSinglePipeline(globalContext map[string]any) {
-	err := processing.RunSingle(processingFile, inputDirectory, outputDirectory, globalContext, contextFile)
+	err := processing.RunSingle(processingFile, inputDirectory, outputDirectory, globalContext, !noSHA256Update)
 	if err != nil {
 		slog.Error("pipeline failed", "error", err)
 		os.Exit(exitToolErrors)
@@ -218,7 +230,7 @@ func runSinglePipeline(globalContext map[string]any) {
 }
 
 func runDiscoveryMode(globalContext map[string]any) {
-	err := processing.RunAll(inputDirectory, outputDirectory, globalContext, maxDepth, contextFile)
+	err := processing.RunAll(inputDirectory, outputDirectory, globalContext, maxDepth, !noSHA256Update)
 	if err != nil {
 		slog.Error("processing failed", "error", err)
 		os.Exit(exitToolErrors)
@@ -239,16 +251,14 @@ func loadGlobalContext() map[string]any {
 }
 
 func includeEnv() {
-	err := godotenv.Load()
-	if err != nil {
-		if !os.IsNotExist(err) {
-			slog.Error("failed to load .env", "error", err)
-			os.Exit(exitDotenvError)
-		}
-		slog.Info("no .env file found")
-	} else {
-		slog.Info("using .env file")
+	if envFile == "" {
+		return
 	}
+	if err := godotenv.Load(envFile); err != nil {
+		slog.Error("failed to load env file", "file", envFile, "error", err)
+		os.Exit(exitDotenvError)
+	}
+	slog.Info("loaded env file", "file", envFile)
 }
 
 func checkInputDirectory() func() {
@@ -257,7 +267,7 @@ func checkInputDirectory() func() {
 		os.Exit(exitInputDirectoryNotSpecified)
 	}
 
-	resolved, cleanup, err := resolve.Resolve(inputDirectory)
+	resolved, cleanup, _, err := resolve.Resolve(inputDirectory, "")
 	if err != nil {
 		slog.Error("failed to resolve input", "input", inputDirectory, "error", err)
 		os.Exit(exitInputDirectoryCheckFailed)
@@ -282,7 +292,7 @@ func resolveContextFile() func() {
 	if contextFile == "" {
 		return nil
 	}
-	resolved, cleanup, err := resolve.Resolve(contextFile)
+	resolved, cleanup, _, err := resolve.Resolve(contextFile, "")
 	if err != nil {
 		slog.Error("failed to resolve context file", "file", contextFile, "error", err)
 		os.Exit(exitLoadContextFailed)
@@ -295,7 +305,7 @@ func resolveInstancesFile() func() {
 	if instancesFile == "" {
 		return nil
 	}
-	resolved, cleanup, err := resolve.Resolve(instancesFile)
+	resolved, cleanup, _, err := resolve.Resolve(instancesFile, "")
 	if err != nil {
 		slog.Error("failed to resolve instances file", "file", instancesFile, "error", err)
 		os.Exit(exitLoadInstancesFailed)

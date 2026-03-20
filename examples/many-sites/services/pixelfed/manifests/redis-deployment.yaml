@@ -2,7 +2,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: pixelfed-redis
-  namespace: pixelfed
   labels:
     app.kubernetes.io/name: redis
     app.kubernetes.io/component: cache

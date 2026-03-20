@@ -10,26 +10,34 @@ import (
 // For now, only file:// and bare paths are implemented; others return an error.
 // The returned cleanup function should be called (if non-nil) when the path is
 // no longer needed — for file:// it is always nil.
-func Resolve(uri string) (path string, cleanup func(), err error) {
+// The third return value (computedSHA256) is non-empty only for HTTPS sources.
+func Resolve(uri, sha256 string) (path string, cleanup func(), computedSHA256 string, err error) {
 	switch {
 	case strings.HasPrefix(uri, "file://"):
-		return strings.TrimPrefix(uri, "file://"), nil, nil
+		return strings.TrimPrefix(uri, "file://"), nil, "", nil
 
 	case strings.HasPrefix(uri, "oci://"):
-		return resolveOCI(strings.TrimPrefix(uri, "oci://"))
+		p, c, e := resolveOCI(strings.TrimPrefix(uri, "oci://"))
+		return p, c, "", e
 
 	case strings.HasPrefix(uri, "https://"):
-		return resolveHTTPS(uri) // keep full URL for net/http
+		return resolveHTTPS(uri, sha256) // keep full URL for net/http
 
 	case strings.HasPrefix(uri, "ocm://"):
-		return resolveOCM(strings.TrimPrefix(uri, "ocm://"))
+		p, c, e := resolveOCM(strings.TrimPrefix(uri, "ocm://"))
+		return p, c, "", e
+
+	case strings.HasPrefix(uri, "helm://"):
+		// Helm sources are resolved directly via ResolveHelm in engine.go
+		// because they need repo+version from SourceEntry.
+		return "", nil, "", fmt.Errorf("helm:// sources must be resolved via ResolveHelm")
 
 	case schemePrefix(uri) != "":
-		return "", nil, fmt.Errorf("unsupported scheme: %s", schemePrefix(uri))
+		return "", nil, "", fmt.Errorf("unsupported scheme: %s", schemePrefix(uri))
 
 	default:
 		// Bare path — treat as implicit file://.
-		return uri, nil, nil
+		return uri, nil, "", nil
 	}
 }
 

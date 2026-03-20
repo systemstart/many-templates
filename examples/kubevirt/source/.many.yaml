@@ -1,0 +1,65 @@
+pipeline:
+  - name: split-kubevirt-operator
+    type: split
+    source:
+      # renovate: datasource=github-releases depName=kubevirt/kubevirt
+      - https: "https://github.com/kubevirt/kubevirt/releases/download/v1.7.2/kubevirt-operator.yaml"
+        sha256: "b74106509bbce107a01b228083b4030890b2278cf918fe5c2cf380fdc2a27aef"
+        temporary: true
+        path: build/
+    split:
+      input: build/kubevirt-operator.yaml
+      by: resource
+      outputDir: manifests/operator/
+    exclude:
+      - "build/**"
+  - name: split-kubevirt-cr
+    type: split
+    source:
+      # renovate: datasource=github-releases depName=kubevirt/kubevirt
+      - https: "https://github.com/kubevirt/kubevirt/releases/download/v1.7.2/kubevirt-cr.yaml"
+        sha256: "43106136dbce3312bdbfdeae612aacafc6c12da518d233f90645b4685d84a2af"
+        temporary: true
+        path: build/
+    split:
+      input: build/kubevirt-cr.yaml
+      by: resource
+      outputDir: manifests/operator/
+    exclude:
+      - "build/**"
+  - name: split-cdi-operator
+    type: split
+    source:
+      # renovate: datasource=github-releases depName=kubevirt/containerized-data-importer
+      - https: "https://github.com/kubevirt/containerized-data-importer/releases/download/v1.64.0/cdi-operator.yaml"
+        sha256: "9540acafd85ecf6523eb77c9759a24e6d02d7494e253baa6930a90f0b8fad63c"
+        temporary: true
+        path: build/
+    split:
+      input: build/cdi-operator.yaml
+      by: resource
+      outputDir: manifests/cdi/
+    exclude:
+      - "build/**"
+  - name: split-cdi-cr
+    type: split
+    source:
+      # renovate: datasource=github-releases depName=kubevirt/containerized-data-importer
+      - https: "https://github.com/kubevirt/containerized-data-importer/releases/download/v1.64.0/cdi-cr.yaml"
+        sha256: "32df9a5a118efd486c918a139795a2200a3759e1cc55b0537986797120e75f32"
+        temporary: true
+        path: build/
+    split:
+      input: build/cdi-cr.yaml
+      by: resource
+      outputDir: manifests/cdi/
+    exclude:
+      - "build/**"
+  - name: create-kustomization
+    type: kustomize-create
+    kustomize-create:
+      autodetect: true
+      recursive: true
+      dir: manifests/
+    exclude:
+      - "kustomization.yaml"

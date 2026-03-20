@@ -3,7 +3,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: lldap
-  namespace: lldap
   labels:
     app.kubernetes.io/name: lldap
 spec:
@@ -18,7 +17,8 @@ spec:
     spec:
       containers:
         - name: lldap
-          image: lldap/lldap:latest
+          # renovate: datasource=docker depName=lldap/lldap
+          image: lldap/lldap:v0.6.2
           ports:
             - name: ldap
               containerPort: 3890

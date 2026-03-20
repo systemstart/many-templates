@@ -42,7 +42,7 @@ func TestResolve(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			path, cleanup, err := Resolve(tt.uri)
+			path, cleanup, _, err := Resolve(tt.uri, "")
 
 			if tt.wantErr != "" {
 				requireErrorContains(t, err, tt.wantErr)
@@ -63,7 +63,7 @@ func TestResolve(t *testing.T) {
 func TestResolve_OCIBranch(t *testing.T) {
 	// Exercise the oci:// branch of Resolve(). The actual OCI pull will fail
 	// (missing crane or bad ref), but we cover the dispatch path.
-	_, _, err := Resolve("oci://invalid-ref-that-wont-resolve")
+	_, _, _, err := Resolve("oci://invalid-ref-that-wont-resolve", "")
 	if err == nil {
 		t.Fatal("expected error for bad OCI ref, got nil")
 	}
@@ -71,7 +71,7 @@ func TestResolve_OCIBranch(t *testing.T) {
 
 func TestResolve_OCMBranch(t *testing.T) {
 	// Exercise the ocm:// branch of Resolve().
-	_, _, err := Resolve("ocm://invalid//comp:v1")
+	_, _, _, err := Resolve("ocm://invalid//comp:v1", "")
 	if err == nil {
 		t.Fatal("expected error for bad OCM ref, got nil")
 	}
@@ -79,7 +79,7 @@ func TestResolve_OCMBranch(t *testing.T) {
 
 func TestResolve_HTTPSBranch(t *testing.T) {
 	// Exercise the https:// branch of Resolve() with an unreachable URL.
-	_, _, err := Resolve("https://127.0.0.1:1/nonexistent")
+	_, _, _, err := Resolve("https://127.0.0.1:1/nonexistent", "")
 	if err == nil {
 		t.Fatal("expected error for unreachable HTTPS URL, got nil")
 	}
