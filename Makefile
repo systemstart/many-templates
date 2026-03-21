@@ -19,7 +19,7 @@ test:
 check:
 	golangci-lint run
 
-tag:
+release-tag:
 	$(eval VERSION ?= $(shell gsemver bump))
 	git tag -a "v$(VERSION)" -m "Release v$(VERSION)"
 	git push origin "v$(VERSION)"
