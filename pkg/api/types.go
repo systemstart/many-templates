@@ -15,6 +15,7 @@ const (
 	StepTypeHelm            = "helm"
 	StepTypeSplit           = "split"
 	StepTypeGenerate        = "generate"
+	StepTypeCopy            = "copy"
 
 	SplitByKind     = "kind"
 	SplitByResource = "resource"
@@ -123,6 +124,7 @@ type StepConfig struct {
 	Helm            *HelmConfig            `yaml:"helm,omitempty"`
 	Split           *SplitConfig           `yaml:"split,omitempty"`
 	Generate        *GenerateConfig        `yaml:"generate,omitempty"`
+	Copy            *CopyConfig            `yaml:"copy,omitempty"`
 }
 
 // FileFilter defines include/exclude glob patterns.
@@ -179,6 +181,12 @@ type SplitConfig struct {
 	OutputDir         string `yaml:"outputDir"`
 	FileNameTemplate  string `yaml:"fileNameTemplate"`
 	CanonicalKeyOrder *bool  `yaml:"canonicalKeyOrder,omitempty"` // default true
+}
+
+// CopyConfig configures the copy step.
+type CopyConfig struct {
+	Files FileFilter `yaml:"files"`
+	Dest  string     `yaml:"dest"`
 }
 
 // InstancesConfig is the top-level instances file format.

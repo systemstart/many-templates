@@ -48,6 +48,7 @@ template repository into ready-to-apply Kubernetes manifests.
     * [`kustomize-create`](#kustomize-create)
     * [`helm`](#helm)
     * [`generate`](#generate)
+    * [`copy`](#copy)
     * [`split`](#split)
   * [Sources](#sources)
   * [Context](#context)
@@ -510,6 +511,32 @@ new files purely from context data.
 | `template` | Inline Go template string                           | required |
 
 Parent directories are created automatically.
+
+### `copy`
+
+Copies files from the original source/input directory into the pipeline working
+directory. Useful for pulling in static manifests, CRs, or other files that
+don't need templating.
+
+```yaml
+- name: copy-cr-files
+  type: copy
+  copy:
+    files:
+      include: ["manifests/**/*.yaml"]
+      exclude: ["manifests/tmp/**"]
+    dest: manifests/
+```
+
+| Field           | Description                                              | Default    |
+|-----------------|----------------------------------------------------------|------------|
+| `files.include` | Glob patterns for files to copy from the source directory | `["**/*"]` |
+| `files.exclude` | Glob patterns for files to skip                          | `[]`       |
+| `dest`          | Destination subdirectory within the working directory    | `"."`      |
+
+Files are copied preserving their relative directory structure. Globs use
+[doublestar](https://github.com/bmatcuk/doublestar) syntax (`**` for recursive
+matching).
 
 ### `split`
 

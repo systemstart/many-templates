@@ -714,6 +714,61 @@ func TestValidate_SourceVersionWithoutHelm(t *testing.T) {
 	}
 }
 
+func TestValidate_ValidCopyStep(t *testing.T) {
+	p := &Pipeline{
+		Pipeline: []StepConfig{
+			{
+				Name: "copy-files",
+				Type: StepTypeCopy,
+				Copy: &CopyConfig{
+					Files: FileFilter{Include: []string{"manifests/**/*.yaml"}},
+					Dest:  "output/",
+				},
+			},
+		},
+	}
+	if err := p.Validate(); err != nil {
+		t.Fatalf("expected valid pipeline, got error: %v", err)
+	}
+}
+
+func TestValidate_MissingCopyConfig(t *testing.T) {
+	p := &Pipeline{
+		Pipeline: []StepConfig{
+			{Name: "a", Type: StepTypeCopy},
+		},
+	}
+	err := p.Validate()
+	if err == nil {
+		t.Fatal("expected error for missing copy config")
+	}
+	if !strings.Contains(err.Error(), "copy config is required") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestValidate_CopyDestTraversal(t *testing.T) {
+	p := &Pipeline{
+		Pipeline: []StepConfig{
+			{
+				Name: "a",
+				Type: StepTypeCopy,
+				Copy: &CopyConfig{
+					Files: FileFilter{Include: []string{"**/*"}},
+					Dest:  "../escape",
+				},
+			},
+		},
+	}
+	err := p.Validate()
+	if err == nil {
+		t.Fatal("expected error for dest path traversal")
+	}
+	if !strings.Contains(err.Error(), "must not traverse") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestValidate_SourceTemporaryValid(t *testing.T) {
 	schemes := []SourceEntry{
 		{OCI: "ghcr.io/myorg/image:v1", Temporary: true},

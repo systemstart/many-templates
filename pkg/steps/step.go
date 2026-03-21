@@ -3,6 +3,7 @@ package steps
 // StepContext provides the runtime context for a step.
 type StepContext struct {
 	WorkDir      string
+	SourceDir    string
 	TemplateData map[string]any
 }
 

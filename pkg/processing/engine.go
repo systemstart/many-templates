@@ -90,7 +90,7 @@ func runStep(stepCfg api.StepConfig, pipeline *api.Pipeline, ctx map[string]any,
 		return fmt.Errorf("creating step %q: %w", stepCfg.Name, err)
 	}
 
-	sctx := buildStepContext(workDir, ctx)
+	sctx := buildStepContext(workDir, pipeline.Dir, ctx)
 
 	result, err := step.Run(sctx)
 	if err != nil {
@@ -110,9 +110,10 @@ func runStep(stepCfg api.StepConfig, pipeline *api.Pipeline, ctx map[string]any,
 	return nil
 }
 
-func buildStepContext(workDir string, ctx map[string]any) steps.StepContext {
+func buildStepContext(workDir string, sourceDir string, ctx map[string]any) steps.StepContext {
 	return steps.StepContext{
 		WorkDir:      workDir,
+		SourceDir:    sourceDir,
 		TemplateData: ctx,
 	}
 }

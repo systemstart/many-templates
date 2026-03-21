@@ -61,6 +61,14 @@ func TestNewStep(t *testing.T) {
 			},
 		},
 		{
+			name: "copy step",
+			cfg: api.StepConfig{
+				Name: "copy-files",
+				Type: api.StepTypeCopy,
+				Copy: &api.CopyConfig{Files: api.FileFilter{Include: []string{"**/*"}}},
+			},
+		},
+		{
 			name: "unknown type",
 			cfg: api.StepConfig{
 				Name: "bad",

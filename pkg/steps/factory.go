@@ -21,6 +21,8 @@ func NewStep(cfg api.StepConfig) (Step, error) {
 		return NewSplitStep(cfg.Name, cfg.Split), nil
 	case api.StepTypeGenerate:
 		return NewGenerateStep(cfg.Name, cfg.Generate), nil
+	case api.StepTypeCopy:
+		return NewCopyStep(cfg.Name, cfg.Copy), nil
 	default:
 		return nil, fmt.Errorf("unknown step type: %s", cfg.Type)
 	}

@@ -16,6 +16,7 @@ var validStepTypes = map[string]bool{
 	StepTypeHelm:            true,
 	StepTypeSplit:           true,
 	StepTypeGenerate:        true,
+	StepTypeCopy:            true,
 }
 
 var sha256Re = regexp.MustCompile(`^[0-9a-f]{64}$`)
@@ -85,6 +86,8 @@ func validateStepConfig(step StepConfig) error {
 		return validateSplitConfig(step)
 	case StepTypeGenerate:
 		return validateGenerateConfig(step)
+	case StepTypeCopy:
+		return validateCopyConfig(step)
 	}
 	return nil
 }
@@ -141,6 +144,18 @@ func validateSplitConfig(step StepConfig) error {
 	}
 	if step.Split.By == SplitByCustom && step.Split.FileNameTemplate == "" {
 		return fmt.Errorf("split.fileNameTemplate is required when split.by is %q", SplitByCustom)
+	}
+	return nil
+}
+
+func validateCopyConfig(step StepConfig) error {
+	if step.Copy == nil {
+		return fmt.Errorf("copy config is required")
+	}
+	if step.Copy.Dest != "" {
+		if err := validateSourcePath(step.Copy.Dest); err != nil {
+			return fmt.Errorf("copy.dest: %w", err)
+		}
 	}
 	return nil
 }
