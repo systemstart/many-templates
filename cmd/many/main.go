@@ -15,12 +15,20 @@ import (
 	"github.com/systemstart/many-templates/pkg/resolve"
 )
 
-var version = func() string {
-	if info, ok := debug.ReadBuildInfo(); ok && info.Main.Version != "" && info.Main.Version != "(devel)" {
-		return info.Main.Version
+// version is set by goreleaser via ldflags at build time.
+// When installed via `go install`, debug.ReadBuildInfo provides the module version.
+var version = ""
+
+func init() {
+	if version != "" {
+		return
 	}
-	return "dev"
-}()
+	if info, ok := debug.ReadBuildInfo(); ok && info.Main.Version != "" && info.Main.Version != "(devel)" {
+		version = info.Main.Version
+	} else {
+		version = "dev"
+	}
+}
 
 const (
 	_ = iota
