@@ -142,8 +142,6 @@ pipeline:
       autodetect: true
       recursive: true
       dir: manifests/
-    exclude:
-      - "kustomization.yaml"
 ```
 
 Each `source` fetches a release YAML into `build/`. The `split` step breaks it
@@ -243,6 +241,13 @@ pipeline:
       input: kustomize-output.yaml
       by: resource
       outputDir: manifests/
+
+  - name: create-kustomization
+    type: kustomize-create
+    kustomize-create:
+      autodetect: true
+      recursive: true
+      dir: manifests/
 ```
 
 **Raw-manifest services** (lldap, woodpecker, ...) render templates and generate a

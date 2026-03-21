@@ -72,39 +72,7 @@ func (s *splitStep) Run(ctx StepContext) (*StepResult, error) {
 		return nil, err
 	}
 
-	if err := writeKustomization(ctx.WorkDir, s.cfg.OutputDir, assignments); err != nil {
-		return nil, err
-	}
-
 	return &StepResult{}, nil
-}
-
-func writeKustomization(workDir, outputDirRel string, assignments map[string][]Manifest) error {
-	prefix := outputDirRel
-	if prefix == "" {
-		prefix = "."
-	}
-
-	paths := make([]string, 0, len(assignments))
-	for relPath := range assignments {
-		paths = append(paths, filepath.Join(prefix, relPath))
-	}
-	sort.Strings(paths)
-
-	var buf bytes.Buffer
-	buf.WriteString("apiVersion: kustomize.config.k8s.io/v1beta1\nkind: Kustomization\nresources:\n")
-	for _, p := range paths {
-		buf.WriteString("  - ")
-		buf.WriteString(p)
-		buf.WriteByte('\n')
-	}
-
-	kustomizationPath := filepath.Join(workDir, "kustomization.yaml")
-	if err := os.WriteFile(kustomizationPath, buf.Bytes(), 0o600); err != nil {
-		return fmt.Errorf("writing kustomization.yaml: %w", err)
-	}
-	slog.Debug("split wrote kustomization.yaml", "path", kustomizationPath, "resources", len(paths))
-	return nil
 }
 
 func writeAssignments(outputDir string, assignments map[string][]Manifest) error {

@@ -209,17 +209,9 @@ metadata:
 		t.Fatal("deployment.yaml is empty")
 	}
 
-	// Check kustomization.yaml was generated at WorkDir level with prefixed paths
-	kustomData, err := os.ReadFile(filepath.Join(dir, "kustomization.yaml"))
-	if err != nil {
-		t.Fatalf("reading kustomization.yaml: %v", err)
-	}
-	kustomStr := string(kustomData)
-	if !strings.Contains(kustomStr, "out/deployment.yaml") {
-		t.Error("kustomization.yaml should reference out/deployment.yaml")
-	}
-	if !strings.Contains(kustomStr, "out/service.yaml") {
-		t.Error("kustomization.yaml should reference out/service.yaml")
+	// Verify kustomization.yaml is NOT generated (must use kustomize-create step)
+	if _, err := os.Stat(filepath.Join(dir, "kustomization.yaml")); err == nil {
+		t.Error("split should not generate kustomization.yaml")
 	}
 }
 
@@ -264,13 +256,9 @@ metadata:
 		t.Fatalf("expected configmap.yaml in workdir: %v", err)
 	}
 
-	// kustomization.yaml should be in workdir with unprefixed paths
-	kustomData, err := os.ReadFile(filepath.Join(dir, "kustomization.yaml"))
-	if err != nil {
-		t.Fatalf("reading kustomization.yaml: %v", err)
-	}
-	if !strings.Contains(string(kustomData), "configmap.yaml") {
-		t.Error("kustomization.yaml should reference configmap.yaml")
+	// Verify kustomization.yaml is NOT generated (must use kustomize-create step)
+	if _, err := os.Stat(filepath.Join(dir, "kustomization.yaml")); err == nil {
+		t.Error("split should not generate kustomization.yaml")
 	}
 }
 
