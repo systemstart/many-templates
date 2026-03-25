@@ -636,8 +636,7 @@ func resolveAndOverlay(entry api.SourceEntry, targetDir, baseDir string) (func()
 		dest = filepath.Join(targetDir, entry.Path)
 	}
 
-	overlaidPaths, overlayErr := overlaySource(localPath, dest)
-	if overlayErr != nil {
+	if overlayErr := overlaySource(localPath, dest); overlayErr != nil {
 		if cleanup != nil {
 			cleanup()
 		}
@@ -645,8 +644,7 @@ func resolveAndOverlay(entry api.SourceEntry, targetDir, baseDir string) (func()
 	}
 
 	update := buildSHA256Update(entry, computed)
-	finalCleanup := buildCleanup(cleanup, overlaidPaths, entry.Temporary)
-	return finalCleanup, update, nil
+	return cleanup, update, nil
 }
 
 func buildSHA256Update(entry api.SourceEntry, computed string) *sha256Update {
@@ -654,18 +652,6 @@ func buildSHA256Update(entry api.SourceEntry, computed string) *sha256Update {
 		return &sha256Update{url: entry.HTTPS, sha256: computed}
 	}
 	return nil
-}
-
-func buildCleanup(cleanup func(), overlaidPaths []string, temporary bool) func() {
-	if !temporary {
-		return cleanup
-	}
-	return func() {
-		removeOverlaidFiles(overlaidPaths)
-		if cleanup != nil {
-			cleanup()
-		}
-	}
 }
 
 func resolveEntry(entry api.SourceEntry, uri string) (string, func(), string, error) {
@@ -690,14 +676,13 @@ func resolveEntry(entry api.SourceEntry, uri string) (string, func(), string, er
 	return path, cleanup, computed, nil
 }
 
-// overlaySource copies resolved content into dest and returns the list of
-// created file and directory paths (directories listed before their children).
+// overlaySource copies resolved content into dest.
 // If resolvedPath is a directory, its contents are copied recursively.
 // If resolvedPath is a file, it is copied into dest/.
-func overlaySource(resolvedPath, dest string) ([]string, error) {
+func overlaySource(resolvedPath, dest string) error {
 	info, err := os.Stat(resolvedPath)
 	if err != nil {
-		return nil, fmt.Errorf("stat %s: %w", resolvedPath, err)
+		return fmt.Errorf("stat %s: %w", resolvedPath, err)
 	}
 
 	if info.IsDir() {
@@ -707,8 +692,7 @@ func overlaySource(resolvedPath, dest string) ([]string, error) {
 	return overlaySingleFile(resolvedPath, dest, info)
 }
 
-func overlayDir(src, dest string) ([]string, error) {
-	var overlaid []string
+func overlayDir(src, dest string) error {
 	err := filepath.WalkDir(src, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return fmt.Errorf("walk error at %s: %w", path, err)
@@ -722,20 +706,18 @@ func overlayDir(src, dest string) ([]string, error) {
 			if mkErr := os.MkdirAll(target, 0o750); mkErr != nil {
 				return fmt.Errorf("creating directory %s: %w", target, mkErr)
 			}
-			overlaid = append(overlaid, target)
 			return nil
 		}
-		created, copyErr := copyFileEntry(path, target, d)
+		_, copyErr := copyFileEntry(path, target, d)
 		if copyErr != nil {
 			return copyErr
 		}
-		overlaid = append(overlaid, created)
 		return nil
 	})
 	if err != nil {
-		return nil, fmt.Errorf("copying tree: %w", err)
+		return fmt.Errorf("copying tree: %w", err)
 	}
-	return overlaid, nil
+	return nil
 }
 
 func copyFileEntry(srcPath, target string, d fs.DirEntry) (string, error) {
@@ -753,48 +735,19 @@ func copyFileEntry(srcPath, target string, d fs.DirEntry) (string, error) {
 	return target, nil
 }
 
-func overlaySingleFile(resolvedPath, dest string, info os.FileInfo) ([]string, error) {
+func overlaySingleFile(resolvedPath, dest string, info os.FileInfo) error {
 	if err := os.MkdirAll(dest, 0o750); err != nil {
-		return nil, fmt.Errorf("creating directory %s: %w", dest, err)
+		return fmt.Errorf("creating directory %s: %w", dest, err)
 	}
 	target := filepath.Join(dest, filepath.Base(resolvedPath))
 	data, err := os.ReadFile(resolvedPath)
 	if err != nil {
-		return nil, fmt.Errorf("reading %s: %w", resolvedPath, err)
+		return fmt.Errorf("reading %s: %w", resolvedPath, err)
 	}
 	if err := os.WriteFile(target, data, info.Mode()); err != nil {
-		return nil, fmt.Errorf("writing %s: %w", target, err)
+		return fmt.Errorf("writing %s: %w", target, err)
 	}
-	return []string{target}, nil
-}
-
-// removeOverlaidFiles removes files first, then empty directories in reverse
-// order (deepest first). Best-effort with log warnings.
-func removeOverlaidFiles(paths []string) {
-	// First pass: remove files.
-	for _, p := range paths {
-		info, err := os.Stat(p)
-		if err != nil {
-			continue // already gone
-		}
-		if !info.IsDir() {
-			if err := os.Remove(p); err != nil {
-				slog.Warn("failed to remove temporary overlay file", "path", p, "error", err)
-			}
-		}
-	}
-	// Second pass: remove directories in reverse order (deepest first), only if empty.
-	for i := len(paths) - 1; i >= 0; i-- {
-		info, err := os.Stat(paths[i])
-		if err != nil {
-			continue
-		}
-		if info.IsDir() {
-			if err := os.Remove(paths[i]); err != nil {
-				slog.Debug("keeping non-empty directory from temporary overlay", "path", paths[i])
-			}
-		}
-	}
+	return nil
 }
 
 func removeConfigFiles(root string) error {

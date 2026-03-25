@@ -690,17 +690,12 @@ func TestOverlaySource_Directory(t *testing.T) {
 
 	// Overlay into a new destination
 	dst := filepath.Join(t.TempDir(), "dest")
-	paths, err := overlaySource(src, dst)
-	if err != nil {
+	if err := overlaySource(src, dst); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
 	assertFileContent(t, filepath.Join(dst, "a.txt"), "alpha")
 	assertFileContent(t, filepath.Join(dst, "sub", "b.txt"), "beta")
-
-	if len(paths) == 0 {
-		t.Fatal("expected non-empty overlaid paths")
-	}
 }
 
 func TestOverlaySource_SingleFile(t *testing.T) {
@@ -710,166 +705,11 @@ func TestOverlaySource_SingleFile(t *testing.T) {
 
 	// Overlay the single file into a destination directory
 	dst := filepath.Join(t.TempDir(), "dest")
-	paths, err := overlaySource(filepath.Join(src, "single.yaml"), dst)
-	if err != nil {
+	if err := overlaySource(filepath.Join(src, "single.yaml"), dst); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
 	assertFileContent(t, filepath.Join(dst, "single.yaml"), "content: here")
-
-	if len(paths) != 1 {
-		t.Fatalf("expected 1 overlaid path, got %d", len(paths))
-	}
-	if paths[0] != filepath.Join(dst, "single.yaml") {
-		t.Errorf("expected %q, got %q", filepath.Join(dst, "single.yaml"), paths[0])
-	}
-}
-
-func TestRemoveOverlaidFiles(t *testing.T) {
-	dir := t.TempDir()
-
-	// Create directory structure: dir/sub/deep/file.txt and dir/other.txt
-	subDir := filepath.Join(dir, "sub")
-	deepDir := filepath.Join(subDir, "deep")
-	mkdirAll(t, deepDir)
-	writeTestFile(t, filepath.Join(deepDir, "file.txt"), "temp")
-	writeTestFile(t, filepath.Join(dir, "other.txt"), "keep") // not in overlaid paths
-
-	overlaidPaths := []string{
-		subDir,
-		deepDir,
-		filepath.Join(deepDir, "file.txt"),
-	}
-
-	removeOverlaidFiles(overlaidPaths)
-
-	// file.txt should be removed
-	assertNotExists(t, filepath.Join(deepDir, "file.txt"))
-	// deep/ should be removed (was empty after file removal)
-	assertNotExists(t, deepDir)
-	// sub/ should be removed (was empty after deep/ removal)
-	assertNotExists(t, subDir)
-	// other.txt should remain (not in overlaid paths)
-	assertFileContent(t, filepath.Join(dir, "other.txt"), "keep")
-}
-
-func TestRemoveOverlaidFiles_PreservesNonEmptyDir(t *testing.T) {
-	dir := t.TempDir()
-
-	subDir := filepath.Join(dir, "shared")
-	mkdirAll(t, subDir)
-	writeTestFile(t, filepath.Join(subDir, "temp.txt"), "temp")
-	writeTestFile(t, filepath.Join(subDir, "keep.txt"), "keep") // not in overlaid paths
-
-	overlaidPaths := []string{
-		subDir,
-		filepath.Join(subDir, "temp.txt"),
-	}
-
-	removeOverlaidFiles(overlaidPaths)
-
-	// temp.txt should be removed
-	assertNotExists(t, filepath.Join(subDir, "temp.txt"))
-	// shared/ should still exist because keep.txt is still there
-	assertFileContent(t, filepath.Join(subDir, "keep.txt"), "keep")
-}
-
-func TestRunPipeline_TemporarySourceCleaned(t *testing.T) {
-	// Create a source directory with files
-	sourceDir := t.TempDir()
-	writeTestFile(t, filepath.Join(sourceDir, "upstream.yaml"), "kind: Deployment")
-
-	// Create pipeline working directory
-	workDir := t.TempDir()
-
-	pipeline := &api.Pipeline{
-		Dir: sourceDir,
-		Pipeline: []api.StepConfig{
-			{
-				Name: "render",
-				Type: api.StepTypeTemplate,
-				Source: api.Sources{{
-					File:      ".",
-					Temporary: true,
-				}},
-				Template: &api.TemplateConfig{Files: api.FileFilter{Include: []string{"*.yaml"}}},
-			},
-		},
-	}
-
-	if err := RunPipeline(pipeline, nil, workDir, true); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	// Temporary source file should be removed after pipeline execution
-	assertNotExists(t, filepath.Join(workDir, "upstream.yaml"))
-}
-
-func TestRunPipeline_NonTemporarySourceRemains(t *testing.T) {
-	// Create a source directory with files
-	sourceDir := t.TempDir()
-	writeTestFile(t, filepath.Join(sourceDir, "base.yaml"), "kind: Service")
-
-	// Create pipeline working directory
-	workDir := t.TempDir()
-
-	pipeline := &api.Pipeline{
-		Dir: sourceDir,
-		Pipeline: []api.StepConfig{
-			{
-				Name: "render",
-				Type: api.StepTypeTemplate,
-				Source: api.Sources{{
-					File: ".",
-				}},
-				Template: &api.TemplateConfig{Files: api.FileFilter{Include: []string{"*.yaml"}}},
-			},
-		},
-	}
-
-	if err := RunPipeline(pipeline, nil, workDir, true); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	// Non-temporary source file should remain
-	assertFileContent(t, filepath.Join(workDir, "base.yaml"), "kind: Service")
-}
-
-func TestRunPipeline_TemporarySourceWithPath(t *testing.T) {
-	// Create a source directory with files
-	sourceDir := t.TempDir()
-	writeTestFile(t, filepath.Join(sourceDir, "upstream.yaml"), "kind: Deployment")
-
-	// Create pipeline working directory with an existing file
-	workDir := t.TempDir()
-	writeTestFile(t, filepath.Join(workDir, "existing.yaml"), "kind: Namespace")
-
-	pipeline := &api.Pipeline{
-		Dir: sourceDir,
-		Pipeline: []api.StepConfig{
-			{
-				Name: "render",
-				Type: api.StepTypeTemplate,
-				Source: api.Sources{{
-					File:      ".",
-					Path:      "vendor/",
-					Temporary: true,
-				}},
-				Template: &api.TemplateConfig{Files: api.FileFilter{Include: []string{"**/*.yaml"}}},
-			},
-		},
-	}
-
-	if err := RunPipeline(pipeline, nil, workDir, true); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	// Temporary source file and its directory should be cleaned up
-	assertNotExists(t, filepath.Join(workDir, "vendor", "upstream.yaml"))
-	assertNotExists(t, filepath.Join(workDir, "vendor"))
-
-	// Existing file should remain
-	assertFileContent(t, filepath.Join(workDir, "existing.yaml"), "kind: Namespace")
 }
 
 func TestRunAll_FailedPipeline(t *testing.T) {

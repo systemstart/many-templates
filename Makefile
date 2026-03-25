@@ -19,6 +19,10 @@ test:
 check:
 	golangci-lint run
 
+
+fmt: 
+	golangci-lint fmt
+
 release-tag:
 	$(eval VERSION ?= $(shell gsemver bump))
 	git tag -a "v$(VERSION)" -m "Release v$(VERSION)"

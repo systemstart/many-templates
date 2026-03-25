@@ -36,7 +36,6 @@ type SourceEntry struct {
 	SHA256    string `yaml:"sha256,omitempty"`    // optional checksum for HTTPS sources
 	Recursive bool   `yaml:"recursive,omitempty"` // only valid with OCM
 	Path      string `yaml:"path,omitempty"`      // target subdirectory within pipeline dir
-	Temporary bool   `yaml:"temporary,omitempty"` // remove overlaid files after pipeline/step execution
 }
 
 // URI returns the resolve-compatible URI string.

@@ -13,7 +13,7 @@ func TestUpdateSourceSHA256_UpdatesEmptySHA256(t *testing.T) {
 	content := `source:
   - https: "https://example.com/file.yaml"
     sha256: ""
-    temporary: true
+
 pipeline: []
 `
 	if err := os.WriteFile(f, []byte(content), 0o644); err != nil {
@@ -48,7 +48,7 @@ func TestUpdateSourceSHA256_InsertsMissingSHA256(t *testing.T) {
 	f := filepath.Join(dir, ".many.yaml")
 	content := `source:
   - https: "https://example.com/file.yaml"
-    temporary: true
+
 pipeline: []
 `
 	if err := os.WriteFile(f, []byte(content), 0o644); err != nil {
@@ -81,7 +81,7 @@ func TestUpdateSourceSHA256_PreservesComments(t *testing.T) {
   # renovate: datasource=github-releases depName=example/repo
   - https: "https://example.com/file.yaml"
     sha256: ""
-    temporary: true
+
 pipeline: []
 `
 	if err := os.WriteFile(f, []byte(content), 0o644); err != nil {

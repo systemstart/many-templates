@@ -1,0 +1,25 @@
+apiVersion: kubevirt.io/v1
+kind: KubeVirt
+metadata:
+  name: kubevirt
+  namespace: kubevirt
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  imagePullPolicy: IfNotPresent
+  certificateRotateStrategy:
+    selfSigned:
+      caOverlapInterval: "168h"
+      certRotateInterval: "168h"
+      caRotateInterval: "168h"
+  configuration:
+    developerConfiguration:
+      featureGates:
+        - ExpandDisks
+        - VSOCK
+        - VirtIOFS
+        - Passt
+        - HotplugVolumes
+    network:
+      defaultNetworkInterface: masquerade
+    selinuxLauncherType: "virt_launcher.process"

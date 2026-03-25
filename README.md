@@ -38,11 +38,14 @@ template repository into ready-to-apply Kubernetes manifests.
     * [1 --- Fetch and Render Go Templates](#1-----fetch-and-render-go-templates)
     * [2 --- Fetch, Split, and Kustomize](#2-----fetch-split-and-kustomize)
     * [3 --- Instances](#3-----instances)
+  * [`.many.yaml` Reference](#manyyaml-reference)
   * [CLI Reference](#cli-reference)
     * [Discovery Mode (default)](#discovery-mode-default)
     * [Single Pipeline Mode](#single-pipeline-mode)
     * [Instances Mode](#instances-mode)
+    * [Pull](#pull)
   * [Pipeline Steps](#pipeline-steps)
+    * [Common Step Fields](#common-step-fields)
     * [`template`](#template)
     * [`kustomize-build`](#kustomize-build)
     * [`kustomize-create`](#kustomize-create)
@@ -76,40 +79,40 @@ make build   # produces ./many
 
 ### 1 --- Fetch and Render Go Templates
 
-[`examples/source-tarball/`](examples/source-tarball/) fetches a tarball from a URL
-and renders Go templates from its contents.
+[`examples/source-https/`](examples/source-https/) fetches a YAML file from a
+GitHub release and renders it as a Go template.
 
 ```yaml
-# examples/source-tarball/.many.yaml
+# examples/source-https/.many.yaml
 pipeline:
   - name: fetch-and-render
     type: template
     source:
-      # renovate: datasource=github-tags depName=myorg/configs
-      https: https://github.com/myorg/configs/archive/main.tar.gz
-      sha256: ""
+      # renovate: datasource=github-releases depName=kubernetes-sigs/metrics-server
+      https: "https://github.com/kubernetes-sigs/metrics-server/releases/download/v0.7.2/components.yaml"
+      sha256: "f103539a54ed72efe66616afc74a8bfaed651703cb3918797599046af5617441"
     template:
       files:
         include: ["**/*.yaml"]
 ```
 
 The `source` on the step fetches files into the working directory before the step
-executes. Here an HTTPS tarball is downloaded and extracted, then all YAML files
-are rendered as Go templates with [Sprig](https://masterminds.github.io/sprig/)
-functions.
+executes. Here an HTTPS source is downloaded (tarballs are auto-extracted), then
+all YAML files are rendered as Go templates with
+[Sprig](https://masterminds.github.io/sprig/) functions.
 
 **SHA-256 verification** --- the `sha256` field pins a source to a known checksum.
-When set `many` verifies the download matches
-before proceeding. An empty string disables verification, useful during development. 
-The checksum will be set if empty, unless `-no-sha256-update` is provided. Note: that doesn't
-update existing checksum, to update they have to be emptied manually first.
+When set, `many` verifies the download matches before proceeding. An empty string
+disables verification, useful during development. The checksum will be set if
+empty, unless `-no-sha256-update` is provided. Note: that doesn't update an
+existing checksum; to update, empty it manually first.
 
 **Renovate integration** --- the `# renovate:` comment is a
-[Renovate](https://docs.renovatebot.com/) annotation. Renovate can be configured to update both the URL
-and the `sha256` checksum.
+[Renovate](https://docs.renovatebot.com/) annotation. Renovate can be configured
+to update both the URL and the `sha256` checksum.
 
 ```bash
-many -input examples/source-tarball -output-directory ./output
+many -input examples/source-https -output-directory ./output
 ```
 
 ### 2 --- Fetch, Split, and Kustomize
@@ -126,7 +129,6 @@ pipeline:
       # renovate: datasource=github-releases depName=kubevirt/kubevirt
       - https: "https://github.com/kubevirt/kubevirt/releases/download/v1.7.2/kubevirt-operator.yaml"
         sha256: "b74106509bbce107a01b228083b4030890b2278cf918fe5c2cf380fdc2a27aef"
-        temporary: true
         path: build/
     split:
       input: build/kubevirt-operator.yaml
@@ -142,25 +144,25 @@ pipeline:
     kustomize-create:
       autodetect: true
       recursive: true
-      dir: manifests/
 ```
 
 Each `source` fetches a release YAML into `build/`. The `split` step breaks it
-into one file per resource under `manifests/`, and `temporary: true` combined with
-`exclude` cleans up the intermediate `build/` directory. The final `kustomize-create`
+into one file per resource under `manifests/`, and `exclude` cleans up the
+intermediate `build/` directory. The final `kustomize-create`
 step generates a `kustomization.yaml` referencing all discovered manifests:
 
 ```
-output/manifests/
+output/
 ├── kustomization.yaml
-├── cdi/
-│   ├── cdi-cdi.yaml
-│   ├── deployment-cdi-operator.yaml
-│   └── ...
-└── operator/
-    ├── kubevirt-kubevirt.yaml
-    ├── deployment-virt-operator.yaml
-    └── ...
+└── manifests/
+    ├── cdi/
+    │   ├── cdi-cdi.yaml
+    │   ├── deployment-cdi-operator.yaml
+    │   └── ...
+    └── operator/
+        ├── kubevirt-kubevirt.yaml
+        ├── deployment-virt-operator.yaml
+        └── ...
 ```
 
 ```bash
@@ -302,6 +304,95 @@ output/
     └── ...
 ```
 
+## `.many.yaml` Reference
+
+A `.many.yaml` file placed anywhere in the input tree defines a pipeline.
+Below is the complete structure with all available fields:
+
+```yaml
+# Optional: pipeline-local context variables, available as {{ .key }} in templates.
+# Deep-merged on top of global and instance context (see Context).
+context:
+  key: "value"
+  nested:
+    key: "value"
+
+# Required: at least one step.
+pipeline:
+  - name: step-name                     # required, must be unique within pipeline
+    type: template                      # required: template | kustomize-build | kustomize-create
+                                        #           helm | split | generate | copy
+
+    # --- Source (optional) ---------------------------------------------------
+    # Fetch files into the working directory before the step runs.
+    # Single entry:
+    source:
+      https: https://example.com/v1.tar.gz
+      sha256: "abc123..."               # 64-char hex; empty string disables verification
+      path: subdir/                     # target subdirectory
+    # Or a list of entries:
+    source:
+      - oci: ghcr.io/org/manifests:v1
+      - file: ./local-overrides
+        path: patches/
+
+    # --- Exclude (optional) --------------------------------------------------
+    # Glob patterns removed from the working directory after the step runs.
+    exclude: ["build/**", "*.tmp"]
+
+    # --- Step-type config (exactly one, matching `type`) ---------------------
+
+    template:                           # type: template
+      files:
+        include: ["**/*.yaml"]          # default: ["**/*"]
+        exclude: ["kustomization.yaml"] # default: []
+
+    kustomize-build:                    # type: kustomize-build
+      dir: "."                          # default: "."
+      enableHelm: false                 # default: false
+      outputFile: out.yaml              # required
+
+    kustomize-create:                   # type: kustomize-create
+      dir: "."                          # default: "."
+      autodetect: true                  # at least one of autodetect / resources required
+      recursive: true                   # requires autodetect
+      resources: []                     # explicit resource list
+      namespace: "staging"
+      nameprefix: "acme-"
+      namesuffix: "-v2"
+      annotations: {}
+      labels: {}
+
+    helm:                               # type: helm
+      chart: ./charts/my-app            # required
+      releaseName: my-app               # required
+      namespace: default                # default: "default"
+      valuesFiles: ["values.yaml"]
+      set: { image.tag: "v1.2.3" }
+      outputFile: helm-output.yaml
+
+    split:                              # type: split
+      input: multi-doc.yaml             # required
+      by: resource                      # kind | resource | group | kind-dir | custom
+      outputDir: manifests/             # default: "."
+      fileNameTemplate: ""              # required when by=custom
+      canonicalKeyOrder: true           # default: true
+
+    generate:                           # type: generate
+      output: manifests/config.yaml     # required
+      template: |                       # required, inline Go template
+        apiVersion: v1
+        kind: ConfigMap
+        metadata:
+          name: {{ .app_name }}
+
+    copy:                               # type: copy
+      files:
+        include: ["manifests/**/*.yaml"] # default: ["**/*"]
+        exclude: []
+      dest: manifests/                  # default: "."
+```
+
 ## CLI Reference
 
 | Flag                          | Description                                                       | Default  |
@@ -374,10 +465,40 @@ global + instance context, discovers and runs pipelines, then removes `.many.yam
 files. If an instance fails, remaining instances still run. The exit code is non-zero
 if any instance failed.
 
+### Pull
+
+Fetch a remote source directly to a local directory, without running any pipeline:
+
+```bash
+many pull <ref> <dir>
+```
+
+The `<ref>` supports the same schemes as `-input`: bare paths, `file://`, `oci://`,
+`https://`, and `ocm://`.
+
+```bash
+many pull oci://ghcr.io/myorg/manifests:v1 ./local-copy
+many pull https://example.com/archive.tar.gz ./extracted
+```
+
 ## Pipeline Steps
 
 Each step has a `name` (unique within the pipeline) and a `type`. Steps execute
 sequentially.
+
+### Common Step Fields
+
+Every step supports these fields regardless of type:
+
+| Field     | Description                                                                 | Default  |
+|-----------|-----------------------------------------------------------------------------|----------|
+| `name`    | Unique identifier within the pipeline                                      | required |
+| `type`    | Step type: `template`, `kustomize-build`, `kustomize-create`, `helm`, `split`, `generate`, `copy` | required |
+| `source`  | Fetch files before the step runs (single entry or list --- see [Sources](#sources)) | none     |
+| `exclude` | Glob patterns to remove from the working directory after the step completes | `[]`     |
+
+In addition, each step has a type-specific config block (e.g. `template:`, `split:`)
+documented below.
 
 ### `template`
 
@@ -418,7 +539,7 @@ Runs `kustomize build` and captures the multi-document YAML output. Requires
 |--------------|-------------------------------------------|---------|
 | `dir`        | Directory containing `kustomization.yaml` | `"."`   |
 | `enableHelm` | Pass `--enable-helm` to kustomize         | `false` |
-| `outputFile` | File to write the build output to         | none    |
+| `outputFile` | File to write the build output to         | required |
 
 ### `kustomize-create`
 
@@ -600,7 +721,6 @@ source:
 |-------------|--------------------------------------------------------------|
 | `path`      | Target subdirectory to place fetched files into              |
 | `sha256`    | SHA-256 checksum for `https` sources (see below)             |
-| `temporary` | Remove fetched files after the step completes                |
 | `recursive` | Recursively resolve OCM references (OCM only)                |
 | `repo`      | Helm chart repository URL (Helm only)                        |
 | `version`   | Helm chart version (Helm only)                               |

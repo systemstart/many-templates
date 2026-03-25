@@ -768,22 +768,3 @@ func TestValidate_CopyDestTraversal(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
-
-func TestValidate_SourceTemporaryValid(t *testing.T) {
-	schemes := []SourceEntry{
-		{OCI: "ghcr.io/myorg/image:v1", Temporary: true},
-		{HTTPS: "https://example.com/file.yaml", Temporary: true},
-		{File: "/tmp/source", Temporary: true},
-		{OCM: "ghcr.io/myorg/ocm//comp:v1", Temporary: true},
-	}
-	for _, src := range schemes {
-		p := &Pipeline{
-			Pipeline: []StepConfig{
-				{Name: "a", Type: StepTypeTemplate, Template: &TemplateConfig{}, Source: Sources{src}},
-			},
-		}
-		if err := p.Validate(); err != nil {
-			t.Errorf("expected temporary: true to be valid with source %+v, got error: %v", src, err)
-		}
-	}
-}
