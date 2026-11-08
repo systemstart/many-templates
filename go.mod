@@ -1,12 +1,12 @@
 module github.com/systemstart/many-templates
 
-go 1.26.4
+go 1.27.3
 
 require (
 	github.com/Masterminds/sprig/v3 v3.3.0
-	github.com/bmatcuk/doublestar/v4 v4.10.2
+	github.com/bmatcuk/doublestar/v4 v4.10.4
 	github.com/joho/godotenv v1.5.1
-	github.com/lmittmann/tint v1.1.3
+	github.com/lmittmann/tint v1.2.1
 	gopkg.in/yaml.v3 v3.0.1
 )
 
