@@ -35,7 +35,7 @@ func Initialize(loggingType string, logLevelName string) error {
 	case Text:
 		logHandler = slog.NewTextHandler(os.Stdout, &logHandlerOptions)
 	case Tint:
-		logHandler = tint.NewHandler(os.Stdout, &tint.Options{
+		logHandler = tint.NewTextHandler(os.Stdout, &tint.Options{
 			AddSource: logHandlerOptions.AddSource,
 			Level:     logHandlerOptions.Level,
 		})

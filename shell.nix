@@ -45,6 +45,18 @@ let
     '';
   };
 
+  # golangci-lint must be built with at least the Go it lints, so it is built
+  # with goPkg. The argument that carries its builder is named after nixpkgs'
+  # default Go (buildGo126Module, then buildGo127Module, ...); read it from the
+  # package instead of naming it, so a nixpkgs bump does not break the shell.
+  lintBuilderArg = pkgs.lib.findFirst
+    (n: builtins.match "buildGo[0-9]+Module" n != null)
+    (throw "golangci-lint takes no buildGo<N>Module argument any more")
+    (builtins.attrNames (pkgs.lib.functionArgs pkgs.golangci-lint.override));
+  golangciLint = pkgs.golangci-lint.override {
+    ${lintBuilderArg} = pkgs.${lintBuilderArg}.override { go = goPkg; };
+  };
+
 in
 pkgs.mkShell {
   name = "go-devshell";
@@ -52,7 +64,7 @@ pkgs.mkShell {
   buildInputs = with pkgs; [
     gnumake
     goPkg
-    (golangci-lint.override { buildGo126Module = buildGo126Module.override { go = goPkg; }; })
+    golangciLint
     goreleaser
     gsemver
     kustomize
