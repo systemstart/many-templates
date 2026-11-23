@@ -4,7 +4,7 @@ go 1.27.3
 
 require (
 	github.com/Masterminds/sprig/v3 v3.3.0
-	github.com/bmatcuk/doublestar/v4 v4.10.4
+	github.com/bmatcuk/doublestar/v4 v4.10.7
 	github.com/joho/godotenv v1.5.1
 	github.com/lmittmann/tint v1.2.1
 	gopkg.in/yaml.v3 v3.0.1
